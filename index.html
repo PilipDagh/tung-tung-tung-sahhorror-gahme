@@ -3,16 +3,19 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
-  <title>GRANNY: TUNG TUNG SAHUR EDITION</title>
-  <!-- Three.js and Cannon.js Libraries -->
+  <title>GRANNY: TUNG TUNG SAHUR - TRUE MULTIPLAYER</title>
+
+  <!-- Core 3D & Physics Engines -->
   <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/cannon.js/0.6.2/cannon.min.js"></script>
+  <!-- Global Internet WebSocket Mesh (Enables Cross-Device Multiplayer) -->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/paho-mqtt/1.0.1/mqttws31.min.js"></script>
+
   <style>
     :root {
       --blood: #8a0303;
       --blood-bright: #e60000;
-      --dark: #080808;
-      --panel: rgba(16, 16, 16, 0.94);
+      --panel: rgba(14, 14, 14, 0.96);
       --font-horror: 'Courier New', Courier, monospace;
     }
     * { box-sizing: border-box; user-select: none; margin: 0; padding: 0; }
@@ -30,85 +33,91 @@
       pointer-events: none; z-index: 10;
       transition: all 0.15s ease;
     }
-    .reticle-dot { width: 6px; height: 6px; background: rgba(255,255,255,0.75); border-radius: 50%; }
-    .reticle-cross { width: 14px; height: 14px; border: 2px solid rgba(255,255,255,0.7); }
-    .reticle-ring { width: 22px; height: 22px; border: 2px solid rgba(255,255,255,0.5); border-radius: 50%; }
+    .reticle-dot { width: 6px; height: 6px; background: rgba(255,255,255,0.8); border-radius: 50%; }
+    .reticle-cross { width: 14px; height: 14px; border: 2px solid rgba(255,255,255,0.8); }
+    .reticle-ring { width: 22px; height: 22px; border: 2px solid rgba(255,255,255,0.6); border-radius: 50%; }
 
     /* HUD */
     #hud {
       position: absolute; top: 0; left: 0; width: 100%; height: 100%;
-      pointer-events: none; z-index: 10; display: none;
+      pointer-events: none; z-index: 15; display: none;
     }
     #interaction-prompt {
-      position: absolute; top: 56%; left: 50%; transform: translateX(-50%);
-      background: rgba(0,0,0,0.75); border: 1px solid var(--blood);
-      padding: 6px 14px; font-size: 13px; letter-spacing: 1px;
-      color: #ffcccc; display: none; text-shadow: 0 0 4px var(--blood-bright);
+      position: absolute; top: 58%; left: 50%; transform: translateX(-50%);
+      background: rgba(0,0,0,0.85); border: 1px solid var(--blood);
+      padding: 7px 16px; font-size: 13px; letter-spacing: 1px;
+      color: #ffcccc; display: none; text-shadow: 0 0 5px var(--blood-bright);
     }
-    #inventory-bar {
-      position: absolute; bottom: 20px; left: 50%; transform: translateX(-50%);
-      display: flex; gap: 10px; background: rgba(10,10,10,0.85);
-      padding: 6px 12px; border: 1px solid #333; border-radius: 4px; pointer-events: auto;
+    #hud-top-bar {
+      position: absolute; top: 16px; left: 20px; right: 20px;
+      display: flex; justify-content: space-between; align-items: center;
     }
-    .inv-slot {
-      width: 50px; height: 50px; border: 1px solid #555; background: #1a1a1a;
-      display: flex; flex-direction: column; align-items: center; justify-content: center;
-      font-size: 10px; text-align: center; color: #aaa;
-    }
-    .inv-slot.active { border-color: var(--blood-bright); box-shadow: 0 0 6px var(--blood); color: #fff; }
     #stealth-indicator {
-      position: absolute; top: 20px; left: 20px; font-size: 14px;
-      color: #777; background: rgba(0,0,0,0.6); padding: 4px 10px; border: 1px solid #333;
+      font-size: 13px; color: #888; background: rgba(0,0,0,0.7);
+      padding: 5px 12px; border: 1px solid #333;
     }
     #stealth-indicator.hidden { color: #00ff66; border-color: #00ff66; }
+    #health-bar-container {
+      width: 140px; height: 12px; background: #222; border: 1px solid #555;
+    }
+    #health-bar-fill { width: 100%; height: 100%; background: var(--blood-bright); transition: width 0.2s; }
+    #inventory-bar {
+      position: absolute; bottom: 20px; left: 50%; transform: translateX(-50%);
+      display: flex; gap: 10px; background: rgba(10,10,10,0.9);
+      padding: 8px 14px; border: 1px solid #333; border-radius: 4px; pointer-events: auto;
+    }
+    .inv-slot {
+      width: 55px; height: 55px; border: 1px solid #555; background: #161616;
+      display: flex; flex-direction: column; align-items: center; justify-content: center;
+      font-size: 10px; text-align: center; color: #aaa; cursor: pointer;
+    }
+    .inv-slot.active { border-color: var(--blood-bright); box-shadow: 0 0 8px var(--blood); color: #fff; }
+
+    /* DAY SPLASH & JUMPSCARE OVERLAYS */
     #day-splash {
       position: absolute; top: 0; left: 0; width: 100%; height: 100%;
-      background: #000; display: flex; flex-direction: column;
+      background: #000; display: none; flex-direction: column;
       align-items: center; justify-content: center; z-index: 100;
-      opacity: 0; pointer-events: none; transition: opacity 1.5s ease;
+      opacity: 0; pointer-events: none; transition: opacity 1.2s ease;
     }
-    #day-splash h1 { font-size: 56px; color: #bbb; letter-spacing: 6px; text-shadow: 0 0 10px #000; }
-    #day-splash p { font-size: 16px; color: #666; margin-top: 10px; }
-
-    /* JUMPSCARE OVERLAY */
+    #day-splash h1 { font-size: clamp(40px, 8vw, 72px); color: #ccc; letter-spacing: 8px; text-shadow: 0 0 15px #000; }
+    #day-splash p { font-size: 16px; color: #888; margin-top: 12px; }
     #jumpscare-overlay {
       position: absolute; top: 0; left: 0; width: 100%; height: 100%;
-      background: radial-gradient(circle, transparent 20%, #400000 80%, #000 100%);
-      z-index: 90; display: none; pointer-events: none; mix-blend-mode: hard-light;
-      animation: flashBlood 0.08s infinite alternate;
+      background: radial-gradient(circle, transparent 20%, #660000 80%, #000 100%);
+      z-index: 95; display: none; pointer-events: none;
     }
-    @keyframes flashBlood { 0% { opacity: 0.8; } 100% { opacity: 1; } }
 
-    /* MOBILE ON-SCREEN CONTROLS */
+    /* MOBILE JOYSTICKS & ON-SCREEN BUTTONS */
     #mobile-controls {
       position: absolute; top: 0; left: 0; width: 100%; height: 100%;
       pointer-events: none; z-index: 25; display: none;
     }
     .touch-zone {
       position: absolute; bottom: 30px; width: 130px; height: 130px;
-      background: rgba(255,255,255,0.06); border: 2px dashed rgba(255,255,255,0.25);
+      background: rgba(255,255,255,0.08); border: 2px dashed rgba(255,255,255,0.3);
       border-radius: 50%; pointer-events: auto; touch-action: none;
     }
-    #touch-move { left: 30px; }
-    #touch-look { right: 30px; }
+    #touch-move { left: 25px; }
+    #touch-look { right: 25px; }
     .joystick-knob {
       position: absolute; width: 44px; height: 44px; top: 50%; left: 50%;
-      transform: translate(-50%, -50%); background: rgba(255,255,255,0.4);
+      transform: translate(-50%, -50%); background: rgba(255,255,255,0.5);
       border-radius: 50%; pointer-events: none;
     }
     #mobile-buttons {
-      position: absolute; bottom: 175px; right: 25px;
+      position: absolute; bottom: 175px; right: 20px;
       display: flex; flex-direction: column; gap: 10px; pointer-events: auto;
     }
     .mob-btn {
-      width: 52px; height: 52px; background: rgba(20,20,20,0.85);
+      width: 54px; height: 54px; background: rgba(20,20,20,0.85);
       border: 1px solid #777; color: #fff; border-radius: 50%;
       font-size: 11px; font-weight: bold; display: flex; align-items: center;
       justify-content: center; text-transform: uppercase;
     }
     .mob-btn:active { background: var(--blood-bright); }
 
-    /* UI MENUS & OVERLAYS */
+    /* UI MENUS & SCREENS */
     .menu-screen {
       position: absolute; top: 0; left: 0; width: 100%; height: 100%;
       background: radial-gradient(circle at center, #1b0000 0%, #080808 85%);
@@ -116,20 +125,20 @@
       z-index: 50; overflow-y: auto; padding: 20px;
     }
     h1.title {
-      font-size: clamp(32px, 6vw, 68px); color: var(--blood-bright);
-      text-shadow: 0 0 15px #000, 0 0 25px var(--blood); letter-spacing: 5px;
+      font-size: clamp(32px, 6vw, 64px); color: var(--blood-bright);
+      text-shadow: 0 0 20px #000, 0 0 25px var(--blood); letter-spacing: 5px;
       margin-bottom: 25px; text-align: center;
     }
     .menu-btn {
-      width: 270px; padding: 13px; margin: 8px 0; background: #111;
+      width: 280px; padding: 13px; margin: 8px 0; background: #111;
       border: 1px solid #444; color: #ddd; font-family: var(--font-horror);
       font-size: 15px; letter-spacing: 2px; text-transform: uppercase;
       cursor: pointer; transition: all 0.2s; text-align: center;
     }
     .menu-btn:hover { background: var(--blood); border-color: var(--blood-bright); color: #fff; }
     .panel {
-      background: var(--panel); border: 1px solid #333; padding: 20px;
-      max-width: 600px; width: 100%; border-radius: 4px; max-height: 85vh; overflow-y: auto;
+      background: var(--panel); border: 1px solid #333; padding: 22px;
+      max-width: 620px; width: 100%; border-radius: 4px; max-height: 85vh; overflow-y: auto;
     }
     .tab-bar { display: flex; border-bottom: 1px solid #444; margin-bottom: 15px; }
     .tab-btn {
@@ -144,11 +153,14 @@
     .setting-row label { color: #ccc; }
     select, input[type="text"], input[type="range"] {
       background: #1e1e1e; border: 1px solid #555; color: #fff;
-      padding: 6px; font-family: var(--font-horror); font-size: 12px;
+      padding: 6px 10px; font-family: var(--font-horror); font-size: 12px;
     }
     input[type="range"] { accent-color: var(--blood-bright); }
-    /* WARDROBE PREVIEW CONTAINER */
-    #wardrobe-canvas { width: 100%; height: 200px; background: #0c0c0c; border: 1px solid #222; margin-bottom: 12px; }
+    #wardrobe-canvas { width: 100%; height: 210px; background: #0c0c0c; border: 1px solid #222; margin-bottom: 12px; }
+    #net-status-pill {
+      font-size: 11px; padding: 4px 8px; border-radius: 3px; display: inline-block;
+      margin-bottom: 12px; background: #1a1a1a; border: 1px solid #333; color: #aaa;
+    }
   </style>
 </head>
 <body>
@@ -157,7 +169,13 @@
 
   <!-- IN-GAME HUD -->
   <div id="hud">
-    <div id="stealth-indicator">STEALTH: STANDING</div>
+    <div id="hud-top-bar">
+      <div id="stealth-indicator">STEALTH: STANDING</div>
+      <div style="display:flex;align-items:center;gap:6px;">
+        <span style="font-size:11px;color:#aaa;">HP</span>
+        <div id="health-bar-container"><div id="health-bar-fill"></div></div>
+      </div>
+    </div>
     <div id="interaction-prompt">[E] INTERACT</div>
     <div id="inventory-bar">
       <div class="inv-slot active" id="slot-0">EMPTY</div>
@@ -178,33 +196,33 @@
     </div>
   </div>
 
-  <!-- DAY SPLASH -->
+  <!-- DAY SPLASH & JUMPSCARE -->
   <div id="day-splash">
     <h1 id="day-title">DAY 1</h1>
     <p id="day-subtitle">Find a way out before she catches you.</p>
   </div>
   <div id="jumpscare-overlay"></div>
 
-  <!-- MAIN MENU SCREEN -->
+  <!-- MAIN MENU -->
   <div class="menu-screen" id="main-menu">
-    <h1 class="title">GRANNY<br><span style="font-size:22px;color:#bbb;">TUNG TUNG SAHUR EDITION</span></h1>
+    <h1 class="title">GRANNY<br><span style="font-size:20px;color:#bbb;">TUNG TUNG SAHUR EDITION</span></h1>
     <button class="menu-btn" id="btn-singleplayer">Single Player</button>
     <button class="menu-btn" id="btn-multiplayer">Multiplayer Lobbies</button>
     <button class="menu-btn" id="btn-wardrobe">Wardrobe</button>
     <button class="menu-btn" id="btn-settings">Settings</button>
   </div>
 
-  <!-- SINGLEPLAYER MODAL -->
+  <!-- SINGLE PLAYER SETUP MODAL -->
   <div class="menu-screen" id="sp-modal" style="display:none;">
     <div class="panel">
       <h2 style="color:var(--blood-bright);margin-bottom:15px;">SINGLE PLAYER CONFIG</h2>
       <div class="setting-row">
         <label>Difficulty</label>
         <select id="sp-diff">
-          <option value="easy">Easy (Granny is slow)</option>
+          <option value="easy">Easy (Slower Granny)</option>
           <option value="normal" selected>Normal (Standard)</option>
-          <option value="hard">Hard (Fast Granny + Creaky floors)</option>
-          <option value="extreme">Extreme (Darkness + Faster AI)</option>
+          <option value="hard">Hard (Creaky floors alert AI)</option>
+          <option value="extreme">Extreme (Faster Granny + Thick fog)</option>
         </select>
       </div>
       <div class="setting-row">
@@ -216,7 +234,7 @@
         <input type="checkbox" id="sp-locks" />
       </div>
       <div class="setting-row">
-        <label>Dark Fog</label>
+        <label>Atmospheric Fog</label>
         <input type="checkbox" id="sp-fog" checked />
       </div>
       <div style="display:flex;gap:10px;margin-top:20px;">
@@ -226,33 +244,44 @@
     </div>
   </div>
 
-  <!-- MULTIPLAYER MODAL -->
+  <!-- MULTIPLAYER (TRUE CROSS-DEVICE MESH) MODAL -->
   <div class="menu-screen" id="mp-modal" style="display:none;">
     <div class="panel">
-      <h2 style="color:var(--blood-bright);margin-bottom:10px;">MULTIPLAYER NETWORK</h2>
-      <p style="font-size:11px;color:#888;margin-bottom:15px;">Real-time peer synchronization. Friendly fire & collision enabled.</p>
-      
+      <h2 style="color:var(--blood-bright);margin-bottom:6px;">GLOBAL MULTIPLAYER</h2>
+      <div id="net-status-pill">CONNECTING TO GLOBAL MESH...</div>
+
+      <!-- LOBBY BROWSER -->
       <div id="mp-lobby-browser">
         <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px;">
           <span>Active Lobbies:</span>
-          <div>
-            <button class="menu-btn" style="width:auto;padding:4px 10px;font-size:11px;" id="btn-sync-lobbies">SYNC LOBBIES</button>
-            <button class="menu-btn" style="width:auto;padding:4px 10px;font-size:11px;" id="btn-show-create-lobby">+ CREATE LOBBY</button>
+          <div style="display:flex;gap:6px;">
+            <button class="menu-btn" style="width:auto;padding:5px 10px;font-size:11px;" id="btn-sync-lobbies">SYNC LOBBIES</button>
+            <button class="menu-btn" style="width:auto;padding:5px 10px;font-size:11px;" id="btn-show-create-lobby">+ CREATE</button>
           </div>
         </div>
-        <div id="lobbies-list" style="max-height:160px;overflow-y:auto;border:1px solid #333;background:#0d0d0d;padding:8px;margin-bottom:12px;font-size:12px;">
-          <div style="color:#666;">Scanning frequency... Click Sync if empty.</div>
+
+        <div id="lobbies-list" style="min-height:110px;max-height:160px;overflow-y:auto;border:1px solid #333;background:#0d0d0d;padding:8px;margin-bottom:12px;font-size:12px;">
+          <div style="color:#666;">Click SYNC LOBBIES to scan for live hosts worldwide...</div>
+        </div>
+
+        <!-- DIRECT ROOM CODE JOIN (DEVICE-TO-DEVICE GUARANTEE) -->
+        <div style="border-top:1px solid #333;padding-top:10px;margin-top:10px;">
+          <label style="font-size:11px;color:#aaa;display:block;margin-bottom:5px;">Join Direct Via 6-Digit Room Code:</label>
+          <div style="display:flex;gap:6px;">
+            <input type="text" id="mp-direct-code" placeholder="E.g. SAH-91" style="flex:1;text-transform:uppercase;" maxlength="8" />
+            <button class="menu-btn" style="width:auto;padding:5px 14px;font-size:11px;" id="btn-join-code">JOIN CODE</button>
+          </div>
         </div>
       </div>
 
-      <!-- CREATE LOBBY PANEL -->
+      <!-- CREATE LOBBY CONFIG -->
       <div id="mp-create-box" style="display:none;border-top:1px solid #444;padding-top:12px;">
         <div class="setting-row">
           <label>Lobby Name</label>
           <input type="text" id="mp-room-name" value="Sahur Manor Escape" maxlength="24" />
         </div>
         <div class="setting-row">
-          <label>Max Players (1 - 21)</label>
+          <label>Max Players (Up to 21)</label>
           <input type="range" id="mp-max-players" min="2" max="21" value="8" />
           <span id="mp-max-players-val">8</span>
         </div>
@@ -268,16 +297,17 @@
           <label>Extra Locks</label>
           <input type="checkbox" id="mp-extra-locks" />
         </div>
-        <button class="menu-btn" style="width:100%;margin-top:8px;" id="btn-commit-create-lobby">CREATE & HOST</button>
+        <button class="menu-btn" style="width:100%;margin-top:10px;" id="btn-commit-create-lobby">HOST & GENERATE CODE</button>
       </div>
 
-      <!-- ACTIVE LOBBY ROOM WAITING AREA -->
+      <!-- LOBBY WAITING ROOM -->
       <div id="mp-lobby-room" style="display:none;">
         <h3 id="room-header" style="color:#00ffaa;margin-bottom:6px;">LOBBY: Sahur Manor</h3>
-        <p style="font-size:11px;color:#aaa;">Players Joined (<span id="room-player-count">1</span>/<span id="room-player-max">8</span>):</p>
+        <p style="font-size:12px;color:#f0c040;margin-bottom:8px;">Share Room Code: <b id="room-code-display" style="font-size:15px;letter-spacing:2px;color:#fff;">------</b></p>
+        <p style="font-size:11px;color:#aaa;">Connected Survivors (<span id="room-player-count">1</span>/<span id="room-player-max">8</span>):</p>
         <ul id="room-player-list" style="margin:10px 0;list-style:none;padding-left:5px;font-size:12px;color:#ffcccc;"></ul>
         <button class="menu-btn" id="btn-start-multiplayer-game" style="width:100%;display:none;background:var(--blood-bright);">START GAME (HOST)</button>
-        <p id="waiting-msg" style="font-size:11px;color:#ffaa00;">Waiting for at least 1 other survivor to join...</p>
+        <p id="waiting-msg" style="font-size:11px;color:#ff8800;margin-top:8px;">Waiting for at least 1 other survivor to join...</p>
       </div>
 
       <div style="margin-top:15px;">
@@ -286,14 +316,14 @@
     </div>
   </div>
 
-  <!-- WARDROBE MODAL -->
+  <!-- WARDROBE -->
   <div class="menu-screen" id="wardrobe-modal" style="display:none;">
     <div class="panel">
       <h2 style="color:var(--blood-bright);margin-bottom:12px;">WARDROBE & CUSTOMIZATION</h2>
       <div id="wardrobe-canvas"></div>
       <div class="setting-row">
-        <label>Shirt / Nightshirt Color</label>
-        <input type="color" id="wardrobe-shirt" value="#445566" />
+        <label>Shirt Color</label>
+        <input type="color" id="wardrobe-shirt" value="#445577" />
       </div>
       <div class="setting-row">
         <label>Skin Tone</label>
@@ -303,19 +333,11 @@
         <label>Pants Color</label>
         <input type="color" id="wardrobe-pants" value="#222233" />
       </div>
-      <div class="setting-row">
-        <label>Headgear</label>
-        <select id="wardrobe-hat">
-          <option value="none">None</option>
-          <option value="cap">Beanie</option>
-          <option value="bandana">Survivor Bandana</option>
-        </select>
-      </div>
       <button class="menu-btn" style="width:100%;margin-top:10px;" id="wardrobe-back">SAVE & BACK</button>
     </div>
   </div>
 
-  <!-- SETTINGS MODAL -->
+  <!-- SETTINGS -->
   <div class="menu-screen" id="settings-modal" style="display:none;">
     <div class="panel">
       <div class="tab-bar">
@@ -324,7 +346,6 @@
         <button class="tab-btn" id="tab-btn-prof">Profile & Stats</button>
       </div>
 
-      <!-- GRAPHICS TAB -->
       <div id="tab-gfx" class="tab-content">
         <div class="setting-row">
           <label>Hardware Profile Preset</label>
@@ -345,29 +366,15 @@
           <label>Shadow Quality</label>
           <select id="opt-shadows">
             <option value="off">Off (Fastest)</option>
-            <option value="low">Low (Tensor / Mobile Standard)</option>
-            <option value="high" selected>High (Soft PCF)</option>
+            <option value="high" selected>Soft PCF Shadows</option>
           </select>
         </div>
         <div class="setting-row">
-          <label>Retro Film Grain & Vignette</label>
-          <input type="checkbox" id="opt-postfx" checked />
-        </div>
-        <div class="setting-row">
-          <label>Dark Atmospheric Fog</label>
+          <label>Atmospheric Fog</label>
           <input type="checkbox" id="opt-fog" checked />
-        </div>
-        <div class="setting-row">
-          <label>Target FPS Cap</label>
-          <select id="opt-fps">
-            <option value="60">60 FPS</option>
-            <option value="120">120 FPS (High Refresh / Tensor G4)</option>
-            <option value="unlimited" selected>Screen Refresh Rate</option>
-          </select>
         </div>
       </div>
 
-      <!-- CONTROLS TAB -->
       <div id="tab-ctrl" class="tab-content" style="display:none;">
         <div class="setting-row">
           <label>Mobile Controls (Joysticks & Buttons)</label>
@@ -386,27 +393,20 @@
             <option value="reticle-ring">Classic Horror Ring</option>
           </select>
         </div>
-        <div class="setting-row">
-          <label>Invert Y-Axis</label>
-          <input type="checkbox" id="opt-inverty" />
-        </div>
       </div>
 
-      <!-- PROFILE & STATS TAB -->
       <div id="tab-prof" class="tab-content" style="display:none;">
         <div class="setting-row">
           <label>Survivor Display Name</label>
-          <input type="text" id="prof-name" value="Survivor_89" maxlength="16" />
+          <input type="text" id="prof-name" value="Survivor" maxlength="16" />
         </div>
         <hr style="border:0;border-top:1px solid #333;margin:15px 0;" />
         <h4 style="color:#aaa;margin-bottom:8px;">SURVIVOR CAREER METRICS</h4>
         <div style="font-size:12px;color:#888;display:grid;grid-template-columns:1fr 1fr;gap:8px;">
           <div>Escapes Made: <b id="stat-escapes" style="color:#fff;">0</b></div>
           <div>Deaths to Granny: <b id="stat-deaths" style="color:var(--blood-bright);">0</b></div>
-          <div>Granny Stuns Landed: <b id="stat-stuns" style="color:#00ffaa;">0</b></div>
+          <div>Granny Stuns: <b id="stat-stuns" style="color:#00ffaa;">0</b></div>
           <div>Days Survived: <b id="stat-days" style="color:#fff;">0</b></div>
-          <div>Items Dropped: <b id="stat-drops" style="color:#fff;">0</b></div>
-          <div>Total Playtime: <b id="stat-time" style="color:#fff;">0m</b></div>
         </div>
       </div>
 
@@ -414,12 +414,10 @@
     </div>
   </div>
 
-  <!-- GAME LOGIC SCRIPT -->
+  <!-- CORE GAME CODE SCRIPT -->
   <script>
   /* =========================================================================
      1. HARDWARE DETECTION & RUNTIME PROFILE ENGINE
-     Optimized explicitly for Google Tensor (G1-G4 / Mali-G78/G715/G720) &
-     Apple A16 - A18 Pro Max silicon architectures.
      ========================================================================= */
   const HardwareProfile = {
     gpu: 'Generic WebGL',
@@ -437,29 +435,24 @@
       }
       const ua = navigator.userAgent.toLowerCase();
       this.isMobile = /iphone|ipad|ipod|android|mobile/.test(ua) || (navigator.maxTouchPoints > 1);
-      
-      // Google Tensor detection (Mali-G78 MP14 [Pixel 6], Mali-G710/G715 [Pixel 7/8], Mali-G720 / Immortalis [Pixel 9/Tensor G4])
+
       if (/mali-g78|mali-g710|mali-g715|mali-g720|immortalis/i.test(this.gpu) || (ua.includes('pixel') && this.isMobile)) {
         this.isTensor = true;
       }
-      // Apple Silicon A16-A18 Pro Max
       if (/apple/i.test(this.gpu) || (/iphone|ipad/.test(ua) && this.isMobile)) {
         this.isAppleSilicon = true;
       }
-
-      console.log(`[Engine] Initialized on GPU: ${this.gpu} | Tensor Optimizations: ${this.isTensor} | Apple Tuned: ${this.isAppleSilicon}`);
+      console.log(`[Hardware] GPU: ${this.gpu} | Tensor: ${this.isTensor} | Apple: ${this.isAppleSilicon}`);
     }
   };
   HardwareProfile.detect();
 
   /* =========================================================================
-     2. PROCEDURAL SOUND ENGINE & "TUNG TUNG SAHUR" SYNTHESIZER
-     Uses Web Audio API exclusively so zero external audio assets can fail.
+     2. PROCEDURAL SOUND ENGINE (TUNG TUNG SAHUR SYNTHESIS)
      ========================================================================= */
   class SoundEngine {
     constructor() {
       this.ctx = null;
-      this.isMuted = false;
       this.chaseLoopActive = false;
       this.chaseTimer = null;
     }
@@ -474,7 +467,6 @@
       }
     }
 
-    // Play synthesized metallic drum "TUNG"
     playTung(freq = 280, duration = 0.28, vol = 1.0) {
       if (!this.ctx) return;
       const now = this.ctx.currentTime;
@@ -483,7 +475,7 @@
       const filter = this.ctx.createBiquadFilter();
 
       osc.type = 'triangle';
-      osc.frequency.setValueAtTime(freq * 1.6, now);
+      osc.frequency.setValueAtTime(freq * 1.5, now);
       osc.frequency.exponentialRampToValueAtTime(freq * 0.45, now + duration);
 
       filter.type = 'bandpass';
@@ -501,11 +493,9 @@
       osc.stop(now + duration);
     }
 
-    // Synthesize the vocal "SAHUR" chant motif using vowel formant filtering
     playSahurChant(vol = 0.85) {
       if (!this.ctx) return;
       const now = this.ctx.currentTime;
-      // White noise buffer for whispery formant throat resonance
       const bufSize = this.ctx.sampleRate * 0.35;
       const buffer = this.ctx.createBuffer(1, bufSize, this.ctx.sampleRate);
       const data = buffer.getChannelData(0);
@@ -515,16 +505,10 @@
       const noise = this.ctx.createBufferSource();
       noise.buffer = buffer;
 
-      // Vocal tract formant filter
       const f1 = this.ctx.createBiquadFilter();
       f1.type = 'bandpass';
       f1.frequency.setValueAtTime(750, now);
       f1.Q.setValueAtTime(3.5, now);
-
-      const f2 = this.ctx.createBiquadFilter();
-      f2.type = 'bandpass';
-      f2.frequency.setValueAtTime(1250, now);
-      f2.Q.setValueAtTime(4.0, now);
 
       const gain = this.ctx.createGain();
       gain.gain.setValueAtTime(vol * 0.75, now);
@@ -532,23 +516,17 @@
 
       noise.connect(f1);
       f1.connect(gain);
-      noise.connect(f2);
-      f2.connect(gain);
       gain.connect(this.ctx.destination);
-
       noise.start(now);
     }
 
-    // Complete "Tung Tung Tung Tung Sahur" loop sequence
     triggerTungSahurPattern(tempoSpeed = 1.0) {
       this.init();
       const step = 0.22 / tempoSpeed;
-      // 4 distinct rhythmic drum hits
       this.playTung(310, 0.2, 0.9);
       setTimeout(() => this.playTung(310, 0.2, 0.9), step * 1000);
       setTimeout(() => this.playTung(310, 0.2, 0.9), step * 2000);
       setTimeout(() => this.playTung(240, 0.35, 1.0), step * 3000);
-      // Followed by the "Sahur" chant
       setTimeout(() => this.playSahurChant(0.9), step * 3800);
     }
 
@@ -570,8 +548,7 @@
 
     playClang(intensity = 1.0) {
       this.init();
-      const freqs = [340, 520, 890, 1400];
-      freqs.forEach(f => this.playTung(f, 0.45 * intensity, 0.4 * intensity));
+      [340, 520, 890, 1400].forEach(f => this.playTung(f, 0.45 * intensity, 0.35 * intensity));
     }
 
     playCreak() {
@@ -582,7 +559,7 @@
       osc.type = 'sawtooth';
       osc.frequency.setValueAtTime(90, now);
       osc.frequency.linearRampToValueAtTime(140, now + 0.3);
-      gain.gain.setValueAtTime(0.15, now);
+      gain.gain.setValueAtTime(0.12, now);
       gain.gain.exponentialRampToValueAtTime(0.001, now + 0.35);
       osc.connect(gain);
       gain.connect(this.ctx.destination);
@@ -609,7 +586,6 @@
     playJumpscare() {
       this.init();
       this.playTung(60, 1.2, 1.0);
-      // Harsh dissonant blast
       const now = this.ctx.currentTime;
       for (let i = 0; i < 4; i++) {
         const osc = this.ctx.createOscillator();
@@ -629,120 +605,104 @@
   const audio = new SoundEngine();
 
   /* =========================================================================
-     3. PROCEDURAL TEXTURE GENERATOR
-     Generates grim horror textures dynamically without network roundtrips.
+     3. ASSET & TEXTURE FACTORY (TOP LEVEL SCOPE - ZERO CRASHES)
      ========================================================================= */
-  const TextureLab = {
-    createWood() {
-      const c = document.createElement('canvas');
-      c.width = 256; c.height = 256;
-      const ctx = c.getContext('2d');
-      ctx.fillStyle = '#2c1e14';
-      ctx.fillRect(0, 0, 256, 256);
-      ctx.strokeStyle = '#1b120c';
-      for (let i = 0; i < 32; i++) {
-        ctx.lineWidth = 1 + Math.random() * 2;
-        ctx.beginPath();
-        const y = Math.random() * 256;
-        ctx.moveTo(0, y);
-        ctx.bezierCurveTo(80, y + (Math.random() - 0.5) * 20, 160, y + (Math.random() - 0.5) * 20, 256, y);
-        ctx.stroke();
-      }
-      return new THREE.CanvasTexture(c);
-    },
-    createWallpaper() {
-      const c = document.createElement('canvas');
-      c.width = 256; c.height = 256;
-      const ctx = c.getContext('2d');
-      ctx.fillStyle = '#2e3025';
-      ctx.fillRect(0, 0, 256, 256);
-      ctx.fillStyle = '#22241b';
-      for (let x = 0; x < 256; x += 32) {
-        for (let y = 0; y < 256; y += 32) {
+  const EngineAssets = {
+    woodMat: null,
+    wallMat: null,
+    concreteMat: null,
+    skinMat: null,
+    bloodMat: null,
+    metalMat: null,
+
+    init() {
+      const makeWoodCanvas = () => {
+        const c = document.createElement('canvas');
+        c.width = 256; c.height = 256;
+        const ctx = c.getContext('2d');
+        ctx.fillStyle = '#2d1e14';
+        ctx.fillRect(0, 0, 256, 256);
+        ctx.strokeStyle = '#1b120c';
+        for (let i = 0; i < 32; i++) {
+          ctx.lineWidth = 1 + Math.random() * 2;
           ctx.beginPath();
-          ctx.arc(x + 16, y + 16, 6, 0, Math.PI * 2);
-          ctx.fill();
+          const y = Math.random() * 256;
+          ctx.moveTo(0, y);
+          ctx.bezierCurveTo(80, y + (Math.random() - 0.5) * 20, 160, y + (Math.random() - 0.5) * 20, 256, y);
+          ctx.stroke();
         }
-      }
-      // Grimy dirt overlay
-      for (let i = 0; i < 600; i++) {
-        ctx.fillStyle = `rgba(10,8,4,${Math.random() * 0.25})`;
-        ctx.fillRect(Math.random() * 256, Math.random() * 256, 3, 3);
-      }
-      return new THREE.CanvasTexture(c);
-    },
-    createConcrete() {
-      const c = document.createElement('canvas');
-      c.width = 256; c.height = 256;
-      const ctx = c.getContext('2d');
-      ctx.fillStyle = '#3a3a3a';
-      ctx.fillRect(0, 0, 256, 256);
-      for (let i = 0; i < 1500; i++) {
-        const v = Math.floor(Math.random() * 40 + 30);
-        ctx.fillStyle = `rgb(${v},${v},${v})`;
-        ctx.fillRect(Math.random() * 256, Math.random() * 256, 2, 2);
-      }
-      return new THREE.CanvasTexture(c);
+        return new THREE.CanvasTexture(c);
+      };
+
+      const makeWallCanvas = () => {
+        const c = document.createElement('canvas');
+        c.width = 256; c.height = 256;
+        const ctx = c.getContext('2d');
+        ctx.fillStyle = '#2f3028';
+        ctx.fillRect(0, 0, 256, 256);
+        ctx.fillStyle = '#22231c';
+        for (let x = 0; x < 256; x += 32) {
+          for (let y = 0; y < 256; y += 32) {
+            ctx.beginPath();
+            ctx.arc(x + 16, y + 16, 5, 0, Math.PI * 2);
+            ctx.fill();
+          }
+        }
+        return new THREE.CanvasTexture(c);
+      };
+
+      this.woodMat = new THREE.MeshStandardMaterial({ map: makeWoodCanvas(), roughness: 0.85 });
+      this.wallMat = new THREE.MeshStandardMaterial({ map: makeWallCanvas(), roughness: 0.95 });
+      this.concreteMat = new THREE.MeshStandardMaterial({ color: 0x333333, roughness: 0.9 });
+      this.skinMat = new THREE.MeshStandardMaterial({ color: 0xb5a088, roughness: 0.8 });
+      this.bloodMat = new THREE.MeshStandardMaterial({ color: 0x660000 });
+      this.metalMat = new THREE.MeshStandardMaterial({ color: 0x888888, metalness: 0.7, roughness: 0.3 });
     }
   };
+  EngineAssets.init();
 
   /* =========================================================================
-     4. GAME DATABASE & STATE MACHINE
+     4. GAME STATE & CAREER METRICS
      ========================================================================= */
   const GameState = {
     day: 1,
     maxDays: 5,
-    isEscaped: false,
-    isGameOver: false,
-    mode: 'sp', // 'sp' or 'mp'
+    mode: 'sp',
     difficulty: 'normal',
     nightmare: false,
     extraLocks: false,
-    darkFog: true,
-    playerStats: {
-      escapes: 0,
-      deaths: 0,
-      stuns: 0,
-      days: 0,
-      drops: 0,
-      playtimeSeconds: 0
+    playerStats: { escapes: 0, deaths: 0, stuns: 0, days: 0 },
+
+    load() {
+      const s = localStorage.getItem('granny_v3_stats');
+      if (s) try { Object.assign(this.playerStats, JSON.parse(s)); } catch(e){}
+      this.updateUI();
     },
-    loadStats() {
-      const s = localStorage.getItem('granny_sahur_stats');
-      if (s) {
-        try { Object.assign(this.playerStats, JSON.parse(s)); } catch(e){}
-      }
-      this.updateStatsUI();
+    save() {
+      localStorage.setItem('granny_v3_stats', JSON.stringify(this.playerStats));
+      this.updateUI();
     },
-    saveStats() {
-      localStorage.setItem('granny_sahur_stats', JSON.stringify(this.playerStats));
-      this.updateStatsUI();
-    },
-    updateStatsUI() {
+    updateUI() {
       document.getElementById('stat-escapes').innerText = this.playerStats.escapes;
       document.getElementById('stat-deaths').innerText = this.playerStats.deaths;
       document.getElementById('stat-stuns').innerText = this.playerStats.stuns;
       document.getElementById('stat-days').innerText = this.playerStats.days;
-      document.getElementById('stat-drops').innerText = this.playerStats.drops;
-      document.getElementById('stat-time').innerText = Math.floor(this.playerStats.playtimeSeconds / 60) + 'm';
     }
   };
-  GameState.loadStats();
-  setInterval(() => { GameState.playerStats.playtimeSeconds++; }, 1000);
+  GameState.load();
 
   /* =========================================================================
-     5. THREE.JS & CANNON.JS ENGINE SETUP
+     5. THREE.JS SCENE & CANNON.JS PHYSICS WORLD
      ========================================================================= */
   const container = document.getElementById('canvas-container');
   const scene = new THREE.Scene();
-  scene.background = new THREE.Color(0x040404);
-  scene.fog = new THREE.FogExp2(0x040404, 0.08);
+  scene.background = new THREE.Color(0x050505);
+  scene.fog = new THREE.FogExp2(0x050505, 0.075);
 
-  const camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 100);
+  const camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 80);
   const renderer = new THREE.WebGLRenderer({
     antialias: !HardwareProfile.isMobile,
-    powerPreference: 'high-performance',
-    precision: HardwareProfile.isTensor ? 'highp' : 'mediump'
+    powerPreference: 'high-performance'
   });
   renderer.setSize(window.innerWidth, window.innerHeight);
   renderer.setPixelRatio(Math.min(window.devicePixelRatio, HardwareProfile.isTensor ? 2.0 : 1.5));
@@ -750,55 +710,51 @@
   renderer.shadowMap.type = THREE.PCFSoftShadowMap;
   container.appendChild(renderer.domElement);
 
-  // CANNON.JS PHYSICS WORLD
+  // MANOR LIGHTING: Ambient and horror point lights
+  const ambientLight = new THREE.AmbientLight(0x222222);
+  scene.add(ambientLight);
+
+  const bedroomLamp = new THREE.PointLight(0xffaa44, 0.8, 14);
+  bedroomLamp.position.set(-8, 9.5, 8);
+  bedroomLamp.castShadow = true;
+  scene.add(bedroomLamp);
+
+  const foyerChandelier = new THREE.PointLight(0xffddaa, 0.6, 18);
+  foyerChandelier.position.set(0, 4.2, 8);
+  scene.add(foyerChandelier);
+
+  const basementLight = new THREE.PointLight(0x44bb77, 0.6, 16);
+  basementLight.position.set(-4, -3.5, -4);
+  scene.add(basementLight);
+
+  // CANNON PHYSICS
   const world = new CANNON.World();
   world.gravity.set(0, -18, 0);
   world.broadphase = new CANNON.NaiveBroadphase();
   world.solver.iterations = 7;
 
-  // Materials
   const groundPhysMat = new CANNON.Material('ground');
   const itemPhysMat = new CANNON.Material('item');
-  const contactMat = new CANNON.ContactMaterial(groundPhysMat, itemPhysMat, {
-    friction: 0.4,
-    restitution: 0.3
-  });
-  world.addContactMaterial(contactMat);
+  world.addContactMaterial(new CANNON.ContactMaterial(groundPhysMat, itemPhysMat, { friction: 0.4, restitution: 0.3 }));
 
   /* =========================================================================
-     6. PROCEDURAL HOUSE BUILDER: 1:1 GRANNY MANOR LAYOUT
-     - Basement & Garage with escape car
-     - Main Floor (Foyer with multi-lock front door, Dining, Kitchen)
-     - Upstairs Hallway, Starting Bedroom, Bathroom, Secret Room behind painting
-     - Attic with creaky rafters
+     6. MAP GENERATION (GRANNY HOUSE 1:1 LAYOUT)
      ========================================================================= */
   const House = {
-    walls: [],
     interactables: [],
     hidingSpots: [],
     physicsBodies: [],
-    doors: [],
     locks: {
       planksRemoved: 0,
       padlockUnlocked: false,
       keycardSwiped: false,
       masterKeyTurned: false,
       carPlugInserted: false,
-      carBatteryInstalled: false,
-      carGasFilled: 0, // 0 to 100
+      carGasFilled: false,
       carKeyInserted: false
     },
 
     build() {
-      const woodTex = TextureLab.createWood();
-      const wallTex = TextureLab.createWallpaper();
-      const concreteTex = TextureLab.createConcrete();
-
-      const woodMat = new THREE.MeshStandardMaterial({ map: woodTex, roughness: 0.9 });
-      const wallMat = new THREE.MeshStandardMaterial({ map: wallTex, roughness: 0.95 });
-      const concreteMat = new THREE.MeshStandardMaterial({ map: concreteTex, roughness: 0.8 });
-
-      // Helper for solid static physics boxes
       const makeBox = (w, h, d, x, y, z, mat, isStatic = true) => {
         const mesh = new THREE.Mesh(new THREE.BoxGeometry(w, h, d), mat);
         mesh.position.set(x, y, z);
@@ -806,10 +762,7 @@
         mesh.receiveShadow = true;
         scene.add(mesh);
 
-        const body = new CANNON.Body({
-          mass: isStatic ? 0 : 1,
-          material: isStatic ? groundPhysMat : itemPhysMat
-        });
+        const body = new CANNON.Body({ mass: isStatic ? 0 : 1.2, material: isStatic ? groundPhysMat : itemPhysMat });
         body.addShape(new CANNON.Box(new CANNON.Vec3(w/2, h/2, d/2)));
         body.position.set(x, y, z);
         world.addBody(body);
@@ -817,80 +770,67 @@
         return { mesh, body };
       };
 
-      // 1. FLOORS (Basement Y: -6, Main Floor Y: 0, Upstairs Y: 5.5, Attic Y: 11)
-      makeBox(28, 0.4, 28, 0, -6, 0, concreteMat);   // Basement
-      makeBox(28, 0.4, 28, 0, 0, 0, woodMat);        // Main Floor
-      makeBox(28, 0.4, 28, 0, 5.5, 0, woodMat);      // Upstairs Floor
-      makeBox(28, 0.4, 28, 0, 11, 0, woodMat);       // Attic Ceiling / Rafters
+      // 1. FLOORS
+      makeBox(28, 0.4, 28, 0, -6, 0, EngineAssets.concreteMat); // Basement
+      makeBox(28, 0.4, 28, 0, 0, 0, EngineAssets.woodMat);      // Ground Floor
+      makeBox(28, 0.4, 28, 0, 5.5, 0, EngineAssets.woodMat);    // Upstairs
+      makeBox(28, 0.4, 28, 0, 11, 0, EngineAssets.woodMat);     // Attic Rafters
 
-      // Outer Perimeter Enclosure
-      makeBox(28, 20, 0.5, 0, 2.5, -14, wallMat);
-      makeBox(28, 20, 0.5, 0, 2.5, 14, wallMat);
-      makeBox(0.5, 20, 28, -14, 2.5, 0, wallMat);
-      makeBox(0.5, 20, 28, 14, 2.5, 0, wallMat);
+      // Perimeter Walls
+      makeBox(28, 20, 0.5, 0, 2.5, -14, EngineAssets.wallMat);
+      makeBox(28, 20, 0.5, 0, 2.5, 14, EngineAssets.wallMat);
+      makeBox(0.5, 20, 28, -14, 2.5, 0, EngineAssets.wallMat);
+      makeBox(0.5, 20, 28, 14, 2.5, 0, EngineAssets.wallMat);
 
-      // --- UPSTAIRS: Starting Bedroom (X: [-14..-2], Z: [2..14], Y: 5.5) ---
-      makeBox(12, 5, 0.4, -8, 8, 2, wallMat); // Bedroom Front Wall
-      makeBox(0.4, 5, 12, -2, 8, 8, wallMat); // Bedroom Right Wall
+      // Starting Bedroom (Upstairs)
+      makeBox(12, 5, 0.4, -8, 8, 2, EngineAssets.wallMat);
+      makeBox(0.4, 5, 12, -2, 8, 8, EngineAssets.wallMat);
 
-      // Starting Bed (Hiding Volume)
-      const bed = new THREE.Group();
-      const bedFrame = new THREE.Mesh(new THREE.BoxGeometry(3.6, 0.7, 5.2), woodMat);
-      bedFrame.position.y = 0.35;
-      bed.add(bedFrame);
-      bed.position.set(-9, 5.5, 9);
+      // Bed (Hiding Spot)
+      const bed = new THREE.Mesh(new THREE.BoxGeometry(3.6, 0.8, 5.2), EngineAssets.woodMat);
+      bed.position.set(-9, 5.9, 9);
       scene.add(bed);
-      this.hidingSpots.push({
-        position: new THREE.Vector3(-9, 6.0, 9),
-        lookAt: new THREE.Vector3(-9, 6.0, 4),
-        type: 'bed'
-      });
+      this.hidingSpots.push({ position: new THREE.Vector3(-9, 6.0, 9), type: 'bed' });
 
-      // Wardrobe Closet Upstairs (Hiding Volume)
-      const wardrobe = new THREE.Mesh(new THREE.BoxGeometry(2.4, 4.4, 1.4), woodMat);
+      // Wardrobe (Hiding Spot)
+      const wardrobe = new THREE.Mesh(new THREE.BoxGeometry(2.4, 4.4, 1.4), EngineAssets.woodMat);
       wardrobe.position.set(-12, 7.7, 4);
       scene.add(wardrobe);
-      this.hidingSpots.push({
-        position: new THREE.Vector3(-12, 6.5, 4.2),
-        lookAt: new THREE.Vector3(-12, 6.5, 6),
-        type: 'wardrobe'
-      });
+      this.hidingSpots.push({ position: new THREE.Vector3(-12, 6.5, 4.2), type: 'closet' });
 
-      // Starting Bedroom Table with fragile noise-making vase
-      const table = makeBox(1.6, 1.4, 1.6, -4, 6.2, 5, woodMat);
-      this.spawnItem('Vase', new THREE.Vector3(-4, 7.4, 5));
+      // Bedside Table + Fragile Noise Vase
+      makeBox(1.6, 1.4, 1.6, -4, 6.2, 5, EngineAssets.woodMat);
+      this.spawnItem('Vase', new THREE.Vector3(-4, 7.3, 5));
 
-      // --- SECRET ROOM BEHIND PAINTING (Upstairs) ---
-      makeBox(6, 5, 0.4, 4, 8, -6, wallMat);
-      const painting = new THREE.Mesh(new THREE.BoxGeometry(2, 2.4, 0.2), woodMat);
+      // Hidden Painting Passage
+      const painting = new THREE.Mesh(new THREE.BoxGeometry(2, 2.4, 0.2), EngineAssets.woodMat);
       painting.position.set(4, 8, -5.7);
       scene.add(painting);
       this.interactables.push({
         mesh: painting,
-        name: 'Hidden Painting Door',
+        name: 'Hidden Wall Painting',
         action: () => {
           painting.position.x += 2.2;
           audio.playCreak();
+          return 'Discovered Secret Passage behind the painting!';
         }
       });
 
-      // --- MAIN FLOOR: FOYER & HEAVILY BARRICADED ESCAPE DOOR ---
-      const frontDoor = new THREE.Mesh(new THREE.BoxGeometry(3.0, 4.2, 0.3), woodMat);
+      // Front Exit Door (Barricaded)
+      const frontDoor = new THREE.Mesh(new THREE.BoxGeometry(3.0, 4.2, 0.3), EngineAssets.woodMat);
       frontDoor.position.set(0, 2.1, 13.8);
       scene.add(frontDoor);
 
-      // Padlock Plank 1
-      const plank1 = new THREE.Mesh(new THREE.BoxGeometry(3.4, 0.4, 0.15), woodMat);
+      const plank1 = new THREE.Mesh(new THREE.BoxGeometry(3.4, 0.4, 0.15), EngineAssets.woodMat);
       plank1.position.set(0, 2.8, 13.6);
       scene.add(plank1);
-      // Padlock Plank 2
-      const plank2 = new THREE.Mesh(new THREE.BoxGeometry(3.4, 0.4, 0.15), woodMat);
+      const plank2 = new THREE.Mesh(new THREE.BoxGeometry(3.4, 0.4, 0.15), EngineAssets.woodMat);
       plank2.position.set(0, 1.6, 13.6);
       scene.add(plank2);
 
       this.interactables.push({
         mesh: frontDoor,
-        name: 'Barricaded Manor Front Door',
+        name: 'Main Exit Door',
         action: (inv) => {
           if (this.locks.planksRemoved < 2) {
             if (inv.has('Hammer')) {
@@ -898,39 +838,38 @@
               if (this.locks.planksRemoved === 1) scene.remove(plank1);
               if (this.locks.planksRemoved === 2) scene.remove(plank2);
               audio.playClang(1.2);
-              return 'Removed a barrier plank with the Hammer!';
+              return 'Pried off a wooden plank with the Hammer!';
             }
-            return 'Barred by heavy wooden planks. Requires a Hammer.';
+            return 'Barricaded by heavy planks. Needs Hammer.';
           }
           if (!this.locks.padlockUnlocked) {
             if (inv.has('Padlock Key')) {
               this.locks.padlockUnlocked = true;
               audio.playClang(0.8);
-              return 'Unlocked the Padlock!';
+              return 'Unlocked Padlock!';
             }
-            return 'Locked with a heavy brass Padlock.';
+            return 'Locked with a heavy Padlock. Needs Padlock Key.';
           }
           if (!this.locks.keycardSwiped) {
             if (inv.has('Keycard')) {
               this.locks.keycardSwiped = true;
               audio.playTung(880, 0.2, 0.5);
-              return 'Swiped Keycard! Electronic latch deactivated.';
+              return 'Swiped Keycard! Door locks released!';
             }
-            return 'Electronic lock panel is active. Requires Keycard.';
+            return 'Electronic lock panel active. Needs Keycard.';
           }
           if (!this.locks.masterKeyTurned) {
             if (inv.has('Master Key')) {
               this.locks.masterKeyTurned = true;
-              audio.playClang(1.5);
-              triggerGameVictory('Escaped through the Front Door!');
-              return 'Turned the Master Key! The door swings open!';
+              triggerVictory('Escaped through the Front Door!');
+              return 'Turned Master Key! Escaped!';
             }
-            return 'Requires the Master Key to unlock the final deadbolt.';
+            return 'Needs Master Key to open the final bolt.';
           }
         }
       });
 
-      // --- BASEMENT: GARAGE & ESCAPE VEHICLE ---
+      // Basement Escape Car
       const car = new THREE.Group();
       const carBody = new THREE.Mesh(new THREE.BoxGeometry(4.2, 1.8, 7.5), new THREE.MeshStandardMaterial({ color: 0x334466, roughness: 0.3 }));
       carBody.position.y = 1.0;
@@ -947,74 +886,72 @@
               this.locks.carPlugInserted = true;
               inv.remove('Spark Plug');
               audio.playClang(0.7);
-              return 'Installed the Spark Plug into the engine!';
+              return 'Installed Spark Plug in car engine!';
             }
-            return 'Engine is missing a Spark Plug.';
+            return 'Car engine is missing a Spark Plug.';
           }
-          if (this.locks.carGasFilled < 100) {
+          if (!this.locks.carGasFilled) {
             if (inv.has('Gasoline Can')) {
-              this.locks.carGasFilled = 100;
+              this.locks.carGasFilled = true;
               inv.remove('Gasoline Can');
               audio.playClang(0.5);
-              return 'Poured gasoline into fuel tank!';
+              return 'Filled car with Gasoline!';
             }
-            return 'Gas tank is completely dry.';
+            return 'Car gas tank is empty.';
           }
           if (!this.locks.carKeyInserted) {
             if (inv.has('Car Key')) {
               this.locks.carKeyInserted = true;
-              audio.playTung(120, 1.5, 1.0);
-              triggerGameVictory('Started the Car and smashed through the Garage exit!');
-              return 'Engine roared to life! Escaped!';
+              triggerVictory('Started the Car and smashed through the garage!');
+              return 'Engine roared to life!';
             }
-            return 'Need Car Key to ignite the engine.';
+            return 'Needs Car Key to start engine.';
           }
         }
       });
 
-      // Scatter Key Items Throughout Rooms
+      // Scatter Key Items
       this.spawnItem('Hammer', new THREE.Vector3(8, 0.8, -8));
       this.spawnItem('Padlock Key', new THREE.Vector3(5, 6.2, -7));
       this.spawnItem('Keycard', new THREE.Vector3(-10, -5.2, 8));
-      this.spawnItem('Master Key', new THREE.Vector3(10, 11.5, 10)); // In attic
+      this.spawnItem('Master Key', new THREE.Vector3(10, 11.5, 10));
       this.spawnItem('Spark Plug', new THREE.Vector3(-8, 6.0, 3));
       this.spawnItem('Gasoline Can', new THREE.Vector3(10, -5.2, -8));
       this.spawnItem('Car Key', new THREE.Vector3(-2, 0.8, 10));
       this.spawnItem('Tranquilizer Crossbow', new THREE.Vector3(10, 6.2, 4));
+      this.spawnItem('Shotgun', new THREE.Vector3(-10, 0.8, -6));
     },
 
     spawnItem(name, pos) {
-      const geo = new THREE.BoxGeometry(0.35, 0.35, 0.35);
       let col = 0xffffff;
       if (name.includes('Key')) col = 0xffcc00;
       if (name.includes('Hammer')) col = 0x888888;
       if (name.includes('Crossbow')) col = 0x884422;
+      if (name.includes('Shotgun')) col = 0x222222;
       if (name.includes('Gasoline')) col = 0xcc2200;
 
-      const mesh = new THREE.Mesh(geo, new THREE.MeshStandardMaterial({ color: col, roughness: 0.4 }));
+      const mesh = new THREE.Mesh(new THREE.BoxGeometry(0.4, 0.4, 0.4), new THREE.MeshStandardMaterial({ color: col, roughness: 0.4 }));
       mesh.position.copy(pos);
       mesh.castShadow = true;
       scene.add(mesh);
 
       const body = new CANNON.Body({ mass: 1.2, material: itemPhysMat });
-      body.addShape(new CANNON.Box(new CANNON.Vec3(0.175, 0.175, 0.175)));
+      body.addShape(new CANNON.Box(new CANNON.Vec3(0.2, 0.2, 0.2)));
       body.position.copy(pos);
       world.addBody(body);
 
-      // Emits acoustic shockwave drawing Tung Tung Granny when hitting surfaces hard
       body.addEventListener('collide', (e) => {
-        const relativeVel = e.contact.getImpactVelocityAgainstThis();
-        if (relativeVel > 2.5) {
-          audio.playClang(Math.min(relativeVel / 8, 1.2));
-          MonsterAI.hearNoise(mesh.position, relativeVel * 3.5);
-          GameState.playerStats.drops++;
+        const vel = e.contact.getImpactVelocityAgainstThis();
+        if (vel > 2.0) {
+          audio.playClang(Math.min(vel / 6, 1.0));
+          MonsterAI.hearNoise(mesh.position, vel * 3.5);
         }
       });
 
       const itemRecord = { name, mesh, body, inInventory: false };
       this.interactables.push({
         mesh,
-        name: name,
+        name,
         itemRecord,
         action: (inv) => {
           if (inv.add(itemRecord)) {
@@ -1032,86 +969,70 @@
   };
 
   /* =========================================================================
-     7. MONSTER AI: TUNG TUNG GRANNY
-     - Dynamic NavMesh / Waypoint Patrol
-     - Hearing radius reacts to dropped items and physics clashes
-     - Vision Cone checks player stealth/hiding status
-     - Audio: Triggers "Tung Tung Tung Tung Sahur" loops during Chase & Alert
-     - Stun System: 120s incapacitated countdown on tranquilizer hit
+     7. MONSTER AI (TUNG TUNG GRANNY)
      ========================================================================= */
   const MonsterAI = {
     mesh: null,
     body: null,
-    state: 'PATROL', // PATROL, INVESTIGATE, CHASE, STUNNED
+    state: 'PATROL',
     speed: 3.2,
     chaseSpeed: 5.4,
     stunTimer: 0,
     investigateTarget: new THREE.Vector3(),
     patrolIndex: 0,
     patrolPoints: [
-      new THREE.Vector3(-8, 6.0, 5),   // Bedroom outside
-      new THREE.Vector3(2, 6.0, 5),    // Upstairs corridor
-      new THREE.Vector3(0, 0.8, 4),    // Foyer
-      new THREE.Vector3(8, 0.8, -4),   // Kitchen
-      new THREE.Vector3(-4, -5.2, -4), // Basement
-      new THREE.Vector3(0, 11.5, 0)    // Attic
+      new THREE.Vector3(-8, 6.0, 5),
+      new THREE.Vector3(2, 6.0, 5),
+      new THREE.Vector3(0, 0.8, 4),
+      new THREE.Vector3(8, 0.8, -4),
+      new THREE.Vector3(-4, -5.2, -4),
+      new THREE.Vector3(0, 11.5, 0)
     ],
 
     init() {
       const g = new THREE.Group();
-      // Granny Nightgown & Hunchback Body
-      const dressMat = new THREE.MeshStandardMaterial({ color: 0x999990, roughness: 0.9 });
-      const skinMat = new THREE.MeshStandardMaterial({ color: 0xb5a088, roughness: 0.8 });
-      const bloodMat = new THREE.MeshStandardMaterial({ color: 0x660000 });
-
-      const torso = new THREE.Mesh(new THREE.CylinderGeometry(0.35, 0.7, 1.8, 8), dressMat);
+      const torso = new THREE.Mesh(new THREE.CylinderGeometry(0.35, 0.7, 1.8, 8), new THREE.MeshStandardMaterial({ color: 0x999990, roughness: 0.9 }));
       torso.position.y = 1.3;
-      torso.rotation.x = 0.15; // Creepy hunch
+      torso.rotation.x = 0.15;
       g.add(torso);
 
-      const head = new THREE.Mesh(new THREE.SphereGeometry(0.35, 8, 8), skinMat);
+      const head = new THREE.Mesh(new THREE.SphereGeometry(0.35, 8, 8), EngineAssets.skinMat);
       head.position.set(0, 2.3, 0.15);
       g.add(head);
 
-      // Glowing Eyes
-      this.leftEye = new THREE.Mesh(new THREE.SphereGeometry(0.06, 6, 6), bloodMat);
-      this.leftEye.position.set(-0.12, 2.35, 0.45);
-      this.rightEye = this.leftEye.clone();
-      this.rightEye.position.x = 0.12;
-      g.add(this.leftEye); g.add(this.rightEye);
+      const eye = new THREE.Mesh(new THREE.SphereGeometry(0.06, 6, 6), EngineAssets.bloodMat);
+      eye.position.set(-0.12, 2.35, 0.45);
+      const eye2 = eye.clone();
+      eye2.position.x = 0.12;
+      g.add(eye); g.add(eye2);
 
-      // Granny's Bloodied Bat
-      const bat = new THREE.Mesh(new THREE.CylinderGeometry(0.04, 0.07, 1.4, 6), woodMat);
+      const bat = new THREE.Mesh(new THREE.CylinderGeometry(0.04, 0.07, 1.4, 6), EngineAssets.woodMat);
       bat.position.set(0.6, 1.2, 0.4);
-      bat.rotation.z = -0.5;
-      bat.rotation.x = 0.4;
+      bat.rotation.set(0.4, 0, -0.5);
       g.add(bat);
 
       g.position.set(0, 0.8, 0);
       scene.add(g);
       this.mesh = g;
 
-      // Granny Physics Cylinder
       this.body = new CANNON.Body({ mass: 10, material: groundPhysMat });
-      this.body.addShape(new CANNON.Cylinder(0.5, 0.5, 2.0, 8));
+      this.body.addShape(new CANNON.Box(new CANNON.Vec3(0.5, 1.0, 0.5)));
       this.body.position.set(0, 1.5, 0);
       world.addBody(this.body);
     },
 
-    hearNoise(pos, noiseRadius = 15) {
+    hearNoise(pos, radius = 15) {
       if (this.state === 'STUNNED') return;
-      const dist = this.mesh.position.distanceTo(pos);
-      if (dist <= noiseRadius) {
+      if (this.mesh.position.distanceTo(pos) <= radius) {
         this.investigateTarget.copy(pos);
         this.state = 'INVESTIGATE';
-        // Trigger alert Tung sound
         audio.triggerTungSahurPattern(1.0);
       }
     },
 
-    stun(durationSeconds = 120) {
+    stun(duration = 120) {
       this.state = 'STUNNED';
-      this.stunTimer = durationSeconds;
+      this.stunTimer = duration;
       audio.stopChaseTheme();
       audio.playTung(100, 1.0, 1.0);
       GameState.playerStats.stuns++;
@@ -1119,15 +1040,12 @@
 
     update(dt) {
       if (!this.mesh) return;
-
-      // Keep physics body and 3D mesh in sync
       this.mesh.position.copy(this.body.position);
       this.mesh.position.y -= 1.0;
 
-      // Handle Stun Countdown
       if (this.state === 'STUNNED') {
         this.stunTimer -= dt;
-        this.mesh.rotation.z = 1.3; // Knocked sideways
+        this.mesh.rotation.z = 1.3;
         if (this.stunTimer <= 0) {
           this.state = 'PATROL';
           this.mesh.rotation.z = 0;
@@ -1135,17 +1053,13 @@
         return;
       }
 
-      // SIGHT CHECK: Cone raycast towards player
+      // Check Line of Sight
       const toPlayer = new THREE.Vector3().subVectors(Player.position, this.mesh.position);
-      const distToPlayer = toPlayer.length();
-
-      if (!Player.isHiding && distToPlayer < 16) {
+      const dist = toPlayer.length();
+      if (!Player.isHiding && dist < 16) {
         toPlayer.normalize();
-        const lookDir = new THREE.Vector3(0, 0, 1).applyEuler(this.mesh.rotation);
-        const angle = lookDir.angleTo(toPlayer);
-
-        if (angle < Math.PI * 0.45) {
-          // Line of Sight unobstructed
+        const fwd = new THREE.Vector3(0, 0, 1).applyEuler(this.mesh.rotation);
+        if (fwd.angleTo(toPlayer) < Math.PI * 0.45) {
           if (this.state !== 'CHASE') {
             this.state = 'CHASE';
             audio.startChaseTheme();
@@ -1153,89 +1067,71 @@
         }
       }
 
-      // STATE MACHINE EXECUTION
-      let targetPos = null;
-      let currentSpeed = this.speed;
-
+      let target = null;
+      let spd = this.speed;
       if (this.state === 'CHASE') {
-        currentSpeed = this.chaseSpeed;
-        targetPos = Player.position;
-        // If player successfully hid, lose line of sight
-        if (Player.isHiding && distToPlayer > 3.0) {
+        spd = this.chaseSpeed;
+        target = Player.position;
+        if (Player.isHiding && dist > 3.0) {
           this.state = 'INVESTIGATE';
           this.investigateTarget.copy(Player.position);
           audio.stopChaseTheme();
         }
       } else if (this.state === 'INVESTIGATE') {
-        targetPos = this.investigateTarget;
-        if (this.mesh.position.distanceTo(this.investigateTarget) < 1.5) {
-          this.state = 'PATROL';
-        }
+        target = this.investigateTarget;
+        if (this.mesh.position.distanceTo(this.investigateTarget) < 1.5) this.state = 'PATROL';
       } else {
-        // PATROL
-        targetPos = this.patrolPoints[this.patrolIndex];
-        if (this.mesh.position.distanceTo(targetPos) < 1.8) {
+        target = this.patrolPoints[this.patrolIndex];
+        if (this.mesh.position.distanceTo(target) < 1.8) {
           this.patrolIndex = (this.patrolIndex + 1) % this.patrolPoints.length;
         }
       }
 
-      // Walk toward target
-      if (targetPos) {
-        const moveDir = new THREE.Vector3().subVectors(targetPos, this.mesh.position);
-        moveDir.y = 0;
-        if (moveDir.length() > 0.1) {
-          moveDir.normalize();
-          this.body.velocity.x = moveDir.x * currentSpeed;
-          this.body.velocity.z = moveDir.z * currentSpeed;
-          this.mesh.rotation.y = Math.atan2(moveDir.x, moveDir.z);
+      if (target) {
+        const dir = new THREE.Vector3().subVectors(target, this.mesh.position);
+        dir.y = 0;
+        if (dir.length() > 0.1) {
+          dir.normalize();
+          this.body.velocity.x = dir.x * spd;
+          this.body.velocity.z = dir.z * spd;
+          this.mesh.rotation.y = Math.atan2(dir.x, dir.z);
         }
       }
 
-      // CATCH PLAYER CHECK
-      if (distToPlayer < 1.6 && !Player.isHiding && this.state !== 'STUNNED') {
+      if (dist < 1.5 && !Player.isHiding && this.state !== 'STUNNED') {
         triggerJumpscare();
       }
     }
   };
 
   /* =========================================================================
-     8. PLAYER CONTROLLER & WEAPON PHYSICS
-     - First-Person Raycast Look & Move
-     - Tranquilizer Crossbow with realistic drop arc physics
-     - Bed & Closet stealth hiding toggle
+     8. PLAYER ENGINE & WEAPONS
      ========================================================================= */
   const Player = {
     position: new THREE.Vector3(-8, 7.2, 8),
-    velocity: new THREE.Vector3(),
     rotation: new THREE.Euler(0, 0, 0, 'YXZ'),
+    health: 100,
     isCrouched: false,
     isHiding: false,
     hidingSpot: null,
-    flashlightOn: true,
     speed: 4.2,
     crouchSpeed: 2.1,
-    inventory: [],
     activeSlot: 0,
 
     init() {
-      this.flashlight = new THREE.SpotLight(0xffeedd, 1.8, 18, Math.PI * 0.22, 0.4, 1.2);
-      this.flashlight.position.set(0, 0, 0);
-      this.flashlight.target.position.set(0, 0, -1);
+      this.flashlight = new THREE.SpotLight(0xfff0dd, 2.0, 19, Math.PI * 0.22, 0.4, 1.2);
       scene.add(this.flashlight);
       scene.add(this.flashlight.target);
     },
 
     update(dt) {
       if (this.isHiding) {
-        if (this.hidingSpot) {
-          camera.position.copy(this.hidingSpot.position);
-        }
+        if (this.hidingSpot) camera.position.copy(this.hidingSpot.position);
         return;
       }
 
-      const targetHeight = this.isCrouched ? 5.9 : 7.2;
-      this.position.y += (targetHeight - this.position.y) * 0.18;
-
+      const targetHeight = this.isCrouched ? 6.0 : 7.2;
+      this.position.y += (targetHeight - this.position.y) * 0.2;
       camera.position.copy(this.position);
       camera.quaternion.setFromEuler(this.rotation);
 
@@ -1243,48 +1139,62 @@
       const fwd = new THREE.Vector3(0, 0, -1).applyEuler(this.rotation);
       this.flashlight.target.position.copy(this.position).add(fwd);
 
-      // Creaky attic floorboards check
+      // Attic floorboard creaking
       if (this.position.y > 10.5 && !this.isCrouched && (Input.keys['KeyW'] || Input.keys['KeyS'])) {
-        if (Math.random() < 0.04) {
+        if (Math.random() < 0.035) {
           audio.playCreak();
           MonsterAI.hearNoise(this.position, 18);
         }
       }
     },
 
+    takeDamage(amount) {
+      this.health = Math.max(0, this.health - amount);
+      document.getElementById('health-bar-fill').style.width = `${this.health}%`;
+      if (this.health <= 0) {
+        triggerJumpscare();
+        this.health = 100;
+        document.getElementById('health-bar-fill').style.width = '100%';
+      }
+    },
+
     fireWeapon() {
-      const activeItem = this.inventory[this.activeSlot];
-      if (!activeItem || activeItem.name !== 'Tranquilizer Crossbow') return;
+      const active = Inventory.items[this.activeSlot];
+      if (!active) return;
 
-      audio.playCrossbowFire();
-      // Projectile Dart Physics
-      const dart = new THREE.Mesh(new THREE.CylinderGeometry(0.02, 0.02, 0.5), new THREE.MeshBasicMaterial({ color: 0x00ffcc }));
-      dart.position.copy(this.position);
-      scene.add(dart);
+      if (active.name === 'Tranquilizer Crossbow') {
+        audio.playCrossbowFire();
+        const dart = new THREE.Mesh(new THREE.CylinderGeometry(0.02, 0.02, 0.4), new THREE.MeshBasicMaterial({ color: 0x00ffcc }));
+        dart.position.copy(this.position);
+        scene.add(dart);
 
-      const fwd = new THREE.Vector3(0, 0, -1).applyEuler(this.rotation);
-      const dartBody = new CANNON.Body({ mass: 0.3 });
-      dartBody.addShape(new CANNON.Box(new CANNON.Vec3(0.05, 0.05, 0.25)));
-      dartBody.position.copy(this.position);
-      dartBody.velocity.set(fwd.x * 32, fwd.y * 32 + 2.0, fwd.z * 32);
-      world.addBody(dartBody);
+        const fwd = new THREE.Vector3(0, 0, -1).applyEuler(this.rotation);
+        const body = new CANNON.Body({ mass: 0.2 });
+        body.addShape(new CANNON.Box(new CANNON.Vec3(0.05, 0.05, 0.2)));
+        body.position.copy(this.position);
+        body.velocity.set(fwd.x * 32, fwd.y * 32 + 1.5, fwd.z * 32);
+        world.addBody(body);
 
-      dartBody.addEventListener('collide', (e) => {
-        if (e.body === MonsterAI.body) {
+        body.addEventListener('collide', (e) => {
+          if (e.body === MonsterAI.body) MonsterAI.stun(120);
+          NetworkEngine.sendHit(body.position, 40, 'dart');
+          setTimeout(() => { scene.remove(dart); world.remove(body); }, 80);
+        });
+      } else if (active.name === 'Shotgun') {
+        audio.playTung(90, 0.6, 1.2);
+        audio.playClang(1.5);
+        const fwd = new THREE.Vector3(0, 0, -1).applyEuler(this.rotation);
+        const hitTarget = this.position.clone().add(fwd.clone().multiplyScalar(10));
+        if (this.position.distanceTo(MonsterAI.mesh.position) < 8) {
           MonsterAI.stun(120);
         }
-        // Multiplayer Friendly Fire Hit Detection
-        Multiplayer.broadcastHit(dartBody.position);
-        setTimeout(() => {
-          scene.remove(dart);
-          world.remove(dartBody);
-        }, 80);
-      });
+        NetworkEngine.sendHit(hitTarget, 100, 'shotgun');
+      }
     }
   };
 
   /* =========================================================================
-     9. INVENTORY & INTERACTION ENGINE
+     9. INVENTORY ENGINE
      ========================================================================= */
   const Inventory = {
     items: [null, null, null],
@@ -1314,31 +1224,27 @@
     dropCurrent() {
       const cur = this.items[Player.activeSlot];
       if (!cur) return;
-
       this.items[Player.activeSlot] = null;
       this.render();
 
       const fwd = new THREE.Vector3(0, 0, -1.2).applyEuler(Player.rotation);
-      const dropPos = Player.position.clone().add(fwd);
-      cur.mesh.position.copy(dropPos);
-      cur.body.position.copy(dropPos);
+      const p = Player.position.clone().add(fwd);
+      cur.mesh.position.copy(p);
+      cur.body.position.copy(p);
       cur.body.velocity.set(fwd.x * 3, 2.0, fwd.z * 3);
-
       scene.add(cur.mesh);
       world.addBody(cur.body);
       cur.inInventory = false;
     },
     render() {
       for (let i = 0; i < 3; i++) {
-        const slot = document.getElementById(`slot-${i}`);
-        slot.innerText = this.items[i] ? this.items[i].name : 'EMPTY';
+        document.getElementById(`slot-${i}`).innerText = this.items[i] ? this.items[i].name : 'EMPTY';
       }
     }
   };
 
   /* =========================================================================
-     10. INPUT & MOBILE TOUCH SYSTEM
-     Virtual analog sticks + PC Pointer Lock controls
+     10. INPUT & TOUCH CONTROLS
      ========================================================================= */
   const Input = {
     keys: {},
@@ -1359,8 +1265,8 @@
       window.addEventListener('keyup', (e) => { this.keys[e.code] = false; });
 
       window.addEventListener('mousedown', (e) => {
-        if (document.pointerLockElement === container) {
-          if (e.button === 0) Player.fireWeapon();
+        if (document.pointerLockElement === container && e.button === 0) {
+          Player.fireWeapon();
         }
       });
 
@@ -1376,18 +1282,15 @@
     },
 
     setupTouchControls() {
-      const moveZone = document.getElementById('touch-move');
-      const knobMove = document.getElementById('knob-move');
-      const lookZone = document.getElementById('touch-look');
-      const knobLook = document.getElementById('knob-look');
-
-      const bindJoystick = (zone, knob, callback) => {
+      const bind = (zoneId, knobId, cb) => {
+        const zone = document.getElementById(zoneId);
+        const knob = document.getElementById(knobId);
         let touchId = null, center = { x: 0, y: 0 };
         zone.addEventListener('touchstart', (e) => {
           const t = e.changedTouches[0];
           touchId = t.identifier;
-          const rect = zone.getBoundingClientRect();
-          center = { x: rect.left + rect.width / 2, y: rect.top + rect.height / 2 };
+          const r = zone.getBoundingClientRect();
+          center = { x: r.left + r.width/2, y: r.top + r.height/2 };
         });
         zone.addEventListener('touchmove', (e) => {
           for (let i = 0; i < e.changedTouches.length; i++) {
@@ -1400,31 +1303,26 @@
               const kx = Math.cos(angle) * dist;
               const ky = Math.sin(angle) * dist;
               knob.style.transform = `translate(calc(-50% + ${kx}px), calc(-50% + ${ky}px))`;
-              callback(kx / 45, ky / 45);
+              cb(kx / 45, ky / 45);
             }
           }
         });
-        const reset = () => {
+        const end = () => {
           touchId = null;
           knob.style.transform = 'translate(-50%, -50%)';
-          callback(0, 0);
+          cb(0, 0);
         };
-        zone.addEventListener('touchend', reset);
-        zone.addEventListener('touchcancel', reset);
+        zone.addEventListener('touchend', end);
+        zone.addEventListener('touchcancel', end);
       };
 
-      bindJoystick(moveZone, knobMove, (x, y) => {
-        this.touchMoveDir.set(x, y);
-      });
-      bindJoystick(lookZone, knobLook, (x, y) => {
-        this.touchLookDir.set(x, y);
-      });
+      bind('touch-move', 'knob-move', (x, y) => { this.touchMoveDir.set(x, y); });
+      bind('touch-look', 'knob-look', (x, y) => { this.touchLookDir.set(x, y); });
 
-      // Mobile On-Screen Action Buttons
-      document.getElementById('m-btn-use').addEventListener('touchstart', doInteract);
-      document.getElementById('m-btn-drop').addEventListener('touchstart', () => Inventory.dropCurrent());
-      document.getElementById('m-btn-crouch').addEventListener('touchstart', toggleCrouch);
-      document.getElementById('m-btn-fire').addEventListener('touchstart', () => Player.fireWeapon());
+      document.getElementById('m-btn-use').onclick = doInteract;
+      document.getElementById('m-btn-drop').onclick = () => Inventory.dropCurrent();
+      document.getElementById('m-btn-crouch').onclick = toggleCrouch;
+      document.getElementById('m-btn-fire').onclick = () => Player.fireWeapon();
     }
   };
   Input.init();
@@ -1450,7 +1348,6 @@
 
   function doInteract() {
     audio.init();
-    // Check if player is already hiding
     if (Player.isHiding) {
       Player.isHiding = false;
       document.getElementById('stealth-indicator').innerText = 'STEALTH: STANDING';
@@ -1458,46 +1355,62 @@
       return;
     }
 
-    // Raycast Interaction
-    const raycaster = new THREE.Raycaster();
-    raycaster.setFromCamera(new THREE.Vector2(0, 0), camera);
-    const meshes = House.interactables.map(o => o.mesh);
-    const hits = raycaster.intersectObjects(meshes, true);
-
+    const ray = new THREE.Raycaster();
+    ray.setFromCamera(new THREE.Vector2(0, 0), camera);
+    const hits = ray.intersectObjects(House.interactables.map(o => o.mesh), true);
     if (hits.length > 0 && hits[0].distance < 3.2) {
-      const hitMesh = hits[0].object;
-      const target = House.interactables.find(o => o.mesh === hitMesh || o.mesh === hitMesh.parent);
+      const target = House.interactables.find(o => o.mesh === hits[0].object || o.mesh === hits[0].object.parent);
       if (target) {
-        const msg = target.action(Inventory);
-        showPrompt(msg || 'Interacted', 2000);
+        showPrompt(target.action(Inventory) || 'Interacted');
       }
       return;
     }
 
-    // Check hiding spots
     for (const spot of House.hidingSpots) {
       if (Player.position.distanceTo(spot.position) < 2.5) {
         Player.isHiding = true;
         Player.hidingSpot = spot;
         document.getElementById('stealth-indicator').innerText = `STEALTH: HIDDEN IN ${spot.type.toUpperCase()}`;
         document.getElementById('stealth-indicator').classList.add('hidden');
-        showPrompt(`Hiding inside ${spot.type}. Press [C] or [E] to emerge.`);
+        showPrompt(`Hiding in ${spot.type}. Press Crouch or Interact to leave.`);
         return;
       }
     }
   }
 
-  function showPrompt(text, duration = 1800) {
+  function showPrompt(text) {
     const p = document.getElementById('interaction-prompt');
     p.innerText = text;
     p.style.display = 'block';
-    clearTimeout(p._timer);
-    p._timer = setTimeout(() => { p.style.display = 'none'; }, duration);
+    clearTimeout(p._t);
+    p._t = setTimeout(() => { p.style.display = 'none'; }, 2200);
   }
 
   /* =========================================================================
-     11. DAY PROGRESSION & JUMPSCARE SYSTEM
+     11. DAY TRANSITION & JUMPSCARE SYSTEM (FIXED TRANSITIONS)
      ========================================================================= */
+  function showDaySplash(dayNum, onComplete) {
+    const splash = document.getElementById('day-splash');
+    document.getElementById('day-title').innerText = `DAY ${dayNum}`;
+    document.getElementById('day-subtitle').innerText =
+      dayNum === 1 ? 'Find a way out before she catches you.' :
+      dayNum === 5 ? 'FINAL DAY. Escape or perish.' :
+      'You woke up on the cold floor...';
+
+    splash.style.display = 'flex';
+    requestAnimationFrame(() => {
+      splash.style.opacity = '1';
+    });
+
+    setTimeout(() => {
+      splash.style.opacity = '0';
+      setTimeout(() => {
+        splash.style.display = 'none';
+        if (onComplete) onComplete();
+      }, 1200);
+    }, 2000);
+  }
+
   function triggerJumpscare() {
     audio.stopChaseTheme();
     audio.playJumpscare();
@@ -1511,10 +1424,10 @@
       GameState.day++;
       GameState.playerStats.deaths++;
       GameState.playerStats.days++;
-      GameState.saveStats();
+      GameState.save();
 
       if (GameState.day > GameState.maxDays) {
-        alert('THE 5 DAYS ARE UP. Granny ended your escape attempt. Game Over.');
+        alert('THE 5 DAYS ARE OVER. You failed to escape the Sahur Manor.');
         window.location.reload();
       } else {
         respawnPlayer();
@@ -1523,120 +1436,171 @@
   }
 
   function respawnPlayer() {
-    const splash = document.getElementById('day-splash');
-    document.getElementById('day-title').innerText = `DAY ${GameState.day}`;
-    splash.style.opacity = '1';
-
     Player.position.set(-8, 7.2, 8);
     Player.isHiding = false;
+    Player.health = 100;
+    document.getElementById('health-bar-fill').style.width = '100%';
+
     MonsterAI.mesh.position.set(0, 0.8, 0);
     MonsterAI.body.position.set(0, 1.5, 0);
     MonsterAI.state = 'PATROL';
 
-    setTimeout(() => {
-      splash.style.opacity = '0';
-    }, 2000);
+    showDaySplash(GameState.day);
   }
 
-  function triggerGameVictory(method) {
+  function triggerVictory(method) {
     GameState.playerStats.escapes++;
-    GameState.saveStats();
-    alert(`FREEDOM! ${method}\nYou defeated the Tung Tung Granny Manor!`);
+    GameState.save();
+    alert(`VICTORY! ${method}`);
     window.location.reload();
   }
 
   /* =========================================================================
-     12. MULTIPLAYER ENGINE: PEER BROADCAST NETWORK (UP TO 21 PLAYERS)
-     Uses WebRTC Broadcast mesh for immediate synchronization.
-     Real Survivor collisions, wardrobe replication, and PvP Friendly Fire!
+     12. TRUE CROSS-DEVICE MULTIPLAYER (WSS GLOBAL CLUSTER)
+     Enables joining across phones, laptops, and tablets anywhere on Earth!
      ========================================================================= */
-  const Multiplayer = {
-    channel: null,
+  const NetworkEngine = {
+    client: null,
+    connected: false,
     isHost: false,
-    myId: 'survivor_' + Math.floor(Math.random() * 99999),
-    roomName: 'Manor Escape',
+    myId: 'survivor_' + Math.random().toString(36).substring(2, 9),
+    roomCode: '',
+    roomName: '',
     maxPlayers: 8,
-    peers: {}, // { id: { mesh, position, color } }
+    peers: {},
 
     init() {
-      this.channel = new BroadcastChannel('granny_sahur_mp_mesh');
-      this.channel.onmessage = (e) => this.handleMessage(e.data);
-    },
+      const statusPill = document.getElementById('net-status-pill');
+      try {
+        const broker = "broker.hivemq.com";
+        const port = 8884;
+        this.client = new Paho.MQTT.Client(broker, port, this.myId);
 
-    broadcast(type, payload) {
-      if (this.channel) {
-        this.channel.postMessage({ type, sender: this.myId, payload });
+        this.client.onConnectionLost = (resp) => {
+          console.warn('[Network] Disconnected:', resp.errorMessage);
+          statusPill.innerText = 'STATUS: RECONNECTING TO CLUSTER...';
+          statusPill.style.color = '#ffaa00';
+          setTimeout(() => this.init(), 3000);
+        };
+
+        this.client.onMessageArrived = (msg) => {
+          this.handlePacket(msg.destinationName, JSON.parse(msg.payloadString));
+        };
+
+        this.client.connect({
+          useSSL: true,
+          timeout: 6,
+          onSuccess: () => {
+            this.connected = true;
+            statusPill.innerText = '● CONNECTED TO GLOBAL MULTIPLAYER (Live Across Devices)';
+            statusPill.style.color = '#00ffaa';
+            this.client.subscribe('granny_v3_lobbies/#');
+          },
+          onFailure: (err) => {
+            console.warn('[Network] Cluster connection failed:', err);
+            statusPill.innerText = 'STATUS: OFFLINE MESH (LOCAL)';
+          }
+        });
+      } catch (err) {
+        console.error(err);
       }
     },
 
-    handleMessage(msg) {
-      if (msg.sender === this.myId) return;
-
-      if (msg.type === 'LOBBY_PING') {
-        if (this.isHost) {
-          this.broadcast('LOBBY_ANNOUNCE', {
-            roomName: this.roomName,
-            maxPlayers: this.maxPlayers,
-            count: Object.keys(this.peers).length + 1
-          });
-        }
-      } else if (msg.type === 'LOBBY_ANNOUNCE') {
-        renderLobbyEntry(msg.payload, msg.sender);
-      } else if (msg.type === 'PLAYER_SYNC') {
-        this.updateRemotePlayer(msg.sender, msg.payload);
-      } else if (msg.type === 'PVP_HIT') {
-        const hitPos = new THREE.Vector3().copy(msg.payload);
-        if (Player.position.distanceTo(hitPos) < 1.4) {
-          showPrompt('Shot by friendly fire dart! Stunned for 5 seconds!');
-          audio.playTung(140, 0.5, 1.0);
-        }
-      } else if (msg.type === 'HOST_START_GAME') {
-        startGame();
+    broadcast(topic, data) {
+      if (this.client && this.client.isConnected()) {
+        const msg = new Paho.MQTT.Message(JSON.stringify(data));
+        msg.destinationName = topic;
+        this.client.send(msg);
       }
     },
 
-    updateRemotePlayer(id, data) {
+    handlePacket(topic, data) {
+      if (data.sender === this.myId) return;
+
+      if (topic === 'granny_v3_lobbies/announce') {
+        renderLobbyCard(data);
+      } else if (topic === 'granny_v3_lobbies/query' && this.isHost) {
+        this.announceLobby();
+      } else if (topic === `granny_v3_room/${this.roomCode}`) {
+        if (data.type === 'JOIN') {
+          this.peers[data.sender] = { name: data.name, wardrobe: data.wardrobe, position: new THREE.Vector3() };
+          updateRoomLobbyUI();
+          if (this.isHost) this.announceLobby();
+        } else if (data.type === 'START') {
+          startGame();
+        } else if (data.type === 'SYNC') {
+          this.updateRemoteSurvivor(data.sender, data);
+        } else if (data.type === 'HIT') {
+          if (Player.position.distanceTo(new THREE.Vector3(data.x, data.y, data.z)) < 2.0) {
+            Player.takeDamage(data.damage);
+            showPrompt(`Hit by ${data.weapon}! -${data.damage} HP`);
+          }
+        }
+      }
+    },
+
+    announceLobby() {
+      this.broadcast('granny_v3_lobbies/announce', {
+        code: this.roomCode,
+        name: this.roomName,
+        count: Object.keys(this.peers).length + 1,
+        max: this.maxPlayers
+      });
+    },
+
+    updateRemoteSurvivor(id, data) {
       if (!this.peers[id]) {
-        // Spawn 3D avatar for remote human survivor
-        const geo = new THREE.CylinderGeometry(0.3, 0.3, 1.8, 8);
-        const mat = new THREE.MeshStandardMaterial({ color: data.color || 0x4466aa });
-        const mesh = new THREE.Mesh(geo, mat);
-        scene.add(mesh);
-        this.peers[id] = { mesh };
-        updateRoomCount();
+        // Spawn remote survivor model
+        const g = new THREE.Group();
+        const body = new THREE.Mesh(new THREE.CylinderGeometry(0.3, 0.3, 1.8, 8), new THREE.MeshStandardMaterial({ color: data.wardrobe ? data.wardrobe.shirt : 0x445577 }));
+        body.position.y = 0.9;
+        g.add(body);
+        scene.add(g);
+        this.peers[id] = { mesh: g, name: data.name };
       }
       const p = this.peers[id];
-      p.mesh.position.set(data.x, data.y - 0.9, data.z);
-      p.mesh.rotation.y = data.rotY;
+      if (p.mesh) {
+        p.mesh.position.set(data.x, data.y - 0.9, data.z);
+        p.mesh.rotation.y = data.rotY;
 
-      // Real Player-to-Player Collision
-      const pDist = Player.position.distanceTo(p.mesh.position);
-      if (pDist < 0.8) {
-        const push = new THREE.Vector3().subVectors(Player.position, p.mesh.position).normalize().multiplyScalar(0.08);
-        Player.position.add(push);
+        // Player Collision
+        if (Player.position.distanceTo(p.mesh.position) < 0.9) {
+          const push = new THREE.Vector3().subVectors(Player.position, p.mesh.position).normalize().multiplyScalar(0.08);
+          Player.position.add(push);
+        }
       }
     },
 
-    broadcastHit(pos) {
-      this.broadcast('PVP_HIT', { x: pos.x, y: pos.y, z: pos.z });
+    sendHit(pos, damage, weapon) {
+      if (GameState.mode === 'mp') {
+        this.broadcast(`granny_v3_room/${this.roomCode}`, {
+          type: 'HIT',
+          sender: this.myId,
+          x: pos.x, y: pos.y, z: pos.z,
+          damage, weapon
+        });
+      }
     },
 
     tickSync() {
-      if (GameState.mode === 'mp') {
-        this.broadcast('PLAYER_SYNC', {
+      if (GameState.mode === 'mp' && this.roomCode) {
+        this.broadcast(`granny_v3_room/${this.roomCode}`, {
+          type: 'SYNC',
+          sender: this.myId,
+          name: document.getElementById('prof-name').value,
           x: Player.position.x,
           y: Player.position.y,
           z: Player.position.z,
           rotY: Player.rotation.y,
-          color: document.getElementById('wardrobe-shirt').value
+          wardrobe: { shirt: document.getElementById('wardrobe-shirt').value }
         });
       }
     }
   };
-  Multiplayer.init();
+  NetworkEngine.init();
 
   /* =========================================================================
-     13. WARDROBE 3D PREVIEW ENGINE
+     13. WARDROBE PREVIEW CANVAS
      ========================================================================= */
   const Wardrobe = {
     renderer: null,
@@ -1648,48 +1612,43 @@
       const box = document.getElementById('wardrobe-canvas');
       this.scene = new THREE.Scene();
       this.camera = new THREE.PerspectiveCamera(50, box.clientWidth / box.clientHeight, 0.1, 10);
-      this.camera.position.set(0, 1.2, 2.5);
+      this.camera.position.set(0, 1.2, 2.6);
 
       this.renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
       this.renderer.setSize(box.clientWidth, box.clientHeight);
       box.appendChild(this.renderer.domElement);
 
-      const light = new THREE.DirectionalLight(0xffffff, 1.5);
+      const light = new THREE.DirectionalLight(0xffffff, 1.4);
       light.position.set(1, 2, 2);
       this.scene.add(light);
       this.scene.add(new THREE.AmbientLight(0x404040));
 
       this.avatar = new THREE.Group();
-      this.bodyMesh = new THREE.Mesh(new THREE.CylinderGeometry(0.3, 0.3, 1.1, 8), new THREE.MeshStandardMaterial({ color: 0x445566 }));
-      this.bodyMesh.position.y = 0.9;
-      this.avatar.add(this.bodyMesh);
+      this.body = new THREE.Mesh(new THREE.CylinderGeometry(0.3, 0.3, 1.1, 8), new THREE.MeshStandardMaterial({ color: 0x445577 }));
+      this.body.position.y = 0.9;
+      this.avatar.add(this.body);
 
-      this.headMesh = new THREE.Mesh(new THREE.SphereGeometry(0.25, 8, 8), new THREE.MeshStandardMaterial({ color: 0xd8b28a }));
-      this.headMesh.position.y = 1.65;
-      this.avatar.add(this.headMesh);
+      this.head = new THREE.Mesh(new THREE.SphereGeometry(0.24, 8, 8), new THREE.MeshStandardMaterial({ color: 0xd8b28a }));
+      this.head.position.y = 1.65;
+      this.avatar.add(this.head);
 
       this.scene.add(this.avatar);
       this.animate();
 
-      document.getElementById('wardrobe-shirt').addEventListener('input', (e) => {
-        this.bodyMesh.material.color.set(e.target.value);
-      });
-      document.getElementById('wardrobe-skin').addEventListener('input', (e) => {
-        this.headMesh.material.color.set(e.target.value);
-      });
+      document.getElementById('wardrobe-shirt').oninput = (e) => { this.body.material.color.set(e.target.value); };
+      document.getElementById('wardrobe-skin').oninput = (e) => { this.head.material.color.set(e.target.value); };
     },
 
     animate() {
       requestAnimationFrame(() => this.animate());
       if (this.avatar) this.avatar.rotation.y += 0.015;
-      this.renderer.render(this.scene, this.camera);
+      if (this.renderer) this.renderer.render(this.scene, this.camera);
     }
   };
 
   /* =========================================================================
-     14. USER INTERFACE, MODALS & SETTINGS ENGINE
+     14. UI HANDLERS, LOBBY CARDS & GAME LAUNCHER
      ========================================================================= */
-  // Screen and modal navigation
   const showScreen = (id) => {
     ['main-menu', 'sp-modal', 'mp-modal', 'wardrobe-modal', 'settings-modal'].forEach(s => {
       document.getElementById(s).style.display = (s === id) ? 'flex' : 'none';
@@ -1709,7 +1668,7 @@
   document.getElementById('wardrobe-back').onclick = () => showScreen('main-menu');
   document.getElementById('settings-back').onclick = () => showScreen('main-menu');
 
-  // Singleplayer Start
+  // Singleplayer Launch
   document.getElementById('sp-start').onclick = () => {
     GameState.mode = 'sp';
     GameState.difficulty = document.getElementById('sp-diff').value;
@@ -1719,101 +1678,111 @@
   };
 
   // Settings Tabs
-  ['gfx', 'ctrl', 'prof'].forEach(tab => {
-    document.getElementById(`tab-btn-${tab}`).onclick = () => {
-      ['gfx', 'ctrl', 'prof'].forEach(t => {
-        document.getElementById(`tab-btn-${t}`).classList.toggle('active', t === tab);
-        document.getElementById(`tab-${t}`).style.display = (t === tab) ? 'block' : 'none';
+  ['gfx', 'ctrl', 'prof'].forEach(t => {
+    document.getElementById(`tab-btn-${t}`).onclick = () => {
+      ['gfx', 'ctrl', 'prof'].forEach(tab => {
+        document.getElementById(`tab-btn-${tab}`).classList.toggle('active', tab === t);
+        document.getElementById(`tab-${tab}`).style.display = (tab === t) ? 'block' : 'none';
       });
     };
   });
 
-  // Settings Toggles
-  document.getElementById('opt-res').oninput = (e) => {
-    const val = parseFloat(e.target.value);
-    document.getElementById('opt-res-val').innerText = `${val}x`;
-    renderer.setPixelRatio(Math.min(window.devicePixelRatio, val));
-  };
   document.getElementById('opt-crosshair').onchange = (e) => {
     document.getElementById('crosshair').className = e.target.value;
   };
   document.getElementById('opt-mobile-mode').onchange = (e) => {
     document.getElementById('mobile-controls').style.display = e.target.checked ? 'block' : 'none';
   };
-  document.getElementById('opt-profile').onchange = (e) => {
-    if (e.target.value === 'tensor') {
-      renderer.setPixelRatio(2.0);
-      renderer.shadowMap.enabled = true;
-      scene.fog.density = 0.05;
-      alert('Applied Google Tensor Ultra Pipeline optimizations!');
-    }
-  };
 
-  // Multiplayer Lobby Creation & Management
+  // Multiplayer Actions
   document.getElementById('btn-show-create-lobby').onclick = () => {
     document.getElementById('mp-create-box').style.display = 'block';
   };
   document.getElementById('mp-max-players').oninput = (e) => {
     document.getElementById('mp-max-players-val').innerText = e.target.value;
   };
-  document.getElementById('btn-commit-create-lobby').onclick = () => {
-    Multiplayer.isHost = true;
-    Multiplayer.roomName = document.getElementById('mp-room-name').value;
-    Multiplayer.maxPlayers = parseInt(document.getElementById('mp-max-players').value);
 
-    document.getElementById('mp-lobby-browser').style.display = 'none';
-    document.getElementById('mp-create-box').style.display = 'none';
-    document.getElementById('mp-lobby-room').style.display = 'block';
-    document.getElementById('room-header').innerText = `LOBBY: ${Multiplayer.roomName}`;
-    document.getElementById('room-player-max').innerText = Multiplayer.maxPlayers;
-    updateRoomCount();
+  document.getElementById('btn-commit-create-lobby').onclick = () => {
+    NetworkEngine.isHost = true;
+    NetworkEngine.roomCode = 'SAH-' + Math.floor(10 + Math.random() * 89);
+    NetworkEngine.roomName = document.getElementById('mp-room-name').value;
+    NetworkEngine.maxPlayers = parseInt(document.getElementById('mp-max-players').value);
+
+    joinRoomUI(NetworkEngine.roomCode, NetworkEngine.roomName);
+    NetworkEngine.client.subscribe(`granny_v3_room/${NetworkEngine.roomCode}`);
+    NetworkEngine.announceLobby();
   };
 
   document.getElementById('btn-sync-lobbies').onclick = () => {
-    const list = document.getElementById('lobbies-list');
-    list.innerHTML = 'Scanning local peer broadcast mesh...';
-    Multiplayer.broadcast('LOBBY_PING', {});
+    document.getElementById('lobbies-list').innerHTML = '<div style="color:#aaa;">Pinging live lobbies worldwide...</div>';
+    NetworkEngine.broadcast('granny_v3_lobbies/query', { sender: NetworkEngine.myId });
   };
 
-  function renderLobbyEntry(data, hostId) {
+  document.getElementById('btn-join-code').onclick = () => {
+    const code = document.getElementById('mp-direct-code').value.trim().toUpperCase();
+    if (code.length >= 4) {
+      connectToLobby(code, 'Direct Manor');
+    }
+  };
+
+  function renderLobbyCard(data) {
     const list = document.getElementById('lobbies-list');
-    list.innerHTML = '';
-    const item = document.createElement('div');
-    item.style.padding = '6px';
-    item.style.borderBottom = '1px solid #333';
-    item.style.display = 'flex';
-    item.style.justifyContent = 'space-between';
-    item.style.alignItems = 'center';
-    item.innerHTML = `
-      <span><b>${data.roomName}</b> (${data.count}/${data.maxPlayers} Survivors)</span>
+    if (list.querySelector(`[data-code="${data.code}"]`)) return;
+    if (list.innerText.includes('Click SYNC') || list.innerText.includes('Pinging')) list.innerHTML = '';
+
+    const div = document.createElement('div');
+    div.setAttribute('data-code', data.code);
+    div.style.cssText = 'padding:6px;border-bottom:1px solid #333;display:flex;justify-content:space-between;align-items:center;';
+    div.innerHTML = `
+      <span><b>${data.name}</b> [${data.code}] (${data.count}/${data.max})</span>
       <button class="menu-btn" style="width:auto;padding:4px 10px;font-size:11px;">JOIN</button>
     `;
-    item.querySelector('button').onclick = () => {
-      document.getElementById('mp-lobby-browser').style.display = 'none';
-      document.getElementById('mp-lobby-room').style.display = 'block';
-      document.getElementById('room-header').innerText = `LOBBY: ${data.roomName}`;
-      updateRoomCount();
-    };
-    list.appendChild(item);
+    div.querySelector('button').onclick = () => connectToLobby(data.code, data.name);
+    list.appendChild(div);
   }
 
-  function updateRoomCount() {
-    const count = Object.keys(Multiplayer.peers).length + 1;
+  function connectToLobby(code, name) {
+    NetworkEngine.isHost = false;
+    NetworkEngine.roomCode = code;
+    NetworkEngine.roomName = name;
+    joinRoomUI(code, name);
+
+    NetworkEngine.client.subscribe(`granny_v3_room/${code}`);
+    NetworkEngine.broadcast(`granny_v3_room/${code}`, {
+      type: 'JOIN',
+      sender: NetworkEngine.myId,
+      name: document.getElementById('prof-name').value,
+      wardrobe: { shirt: document.getElementById('wardrobe-shirt').value }
+    });
+  }
+
+  function joinRoomUI(code, name) {
+    GameState.mode = 'mp';
+    document.getElementById('mp-lobby-browser').style.display = 'none';
+    document.getElementById('mp-create-box').style.display = 'none';
+    document.getElementById('mp-lobby-room').style.display = 'block';
+    document.getElementById('room-header').innerText = `LOBBY: ${name}`;
+    document.getElementById('room-code-display').innerText = code;
+    updateRoomLobbyUI();
+  }
+
+  function updateRoomLobbyUI() {
+    const count = Object.keys(NetworkEngine.peers).length + 1;
     document.getElementById('room-player-count').innerText = count;
     const list = document.getElementById('room-player-list');
     list.innerHTML = `<li>${document.getElementById('prof-name').value} (You)</li>`;
-    Object.keys(Multiplayer.peers).forEach((k, idx) => {
-      list.innerHTML += `<li>Survivor_Guest_${idx + 1}</li>`;
+    Object.values(NetworkEngine.peers).forEach(p => {
+      list.innerHTML += `<li>${p.name || 'Survivor'}</li>`;
     });
 
-    if (Multiplayer.isHost && count >= 2) {
+    if (NetworkEngine.isHost && count >= 2) {
       document.getElementById('btn-start-multiplayer-game').style.display = 'block';
       document.getElementById('waiting-msg').style.display = 'none';
     }
   }
 
   document.getElementById('btn-start-multiplayer-game').onclick = () => {
-    Multiplayer.broadcast('HOST_START_GAME', {});
+    NetworkEngine.broadcast(`granny_v3_room/${NetworkEngine.roomCode}`, { type: 'START', sender: NetworkEngine.myId });
     startGame();
   };
 
@@ -1822,6 +1791,7 @@
     audio.playTung(220, 0.4, 0.9);
     showScreen('');
     document.getElementById('hud').style.display = 'block';
+
     if (document.getElementById('opt-mobile-mode').checked || HardwareProfile.isMobile) {
       document.getElementById('mobile-controls').style.display = 'block';
     } else {
@@ -1837,14 +1807,14 @@
   });
 
   /* =========================================================================
-     15. MAIN ENGINE LOOP & INTEGRATION RUNNER
+     15. RUNTIME INITIALIZATION & GAME LOOP
      ========================================================================= */
   House.build();
   MonsterAI.init();
   Player.init();
 
   let clock = new THREE.Clock();
-  setInterval(() => { Multiplayer.tickSync(); }, 50); // 20Hz MP updates
+  setInterval(() => { NetworkEngine.tickSync(); }, 50); // 20Hz Sync
 
   function gameLoop() {
     requestAnimationFrame(gameLoop);
@@ -1852,15 +1822,15 @@
 
     world.step(1 / 60, dt, 3);
 
-    // Sync Cannon Physics to Three Meshes
+    // Sync Dynamic Physics Bodies
     House.physicsBodies.forEach(pb => {
       pb.mesh.position.copy(pb.body.position);
       pb.mesh.quaternion.copy(pb.body.quaternion);
     });
 
-    // Update Player Movement
+    // Player Movement
     if (!Player.isHiding) {
-      const curSpeed = Player.isCrouched ? Player.crouchSpeed : Player.speed;
+      const spd = Player.isCrouched ? Player.crouchSpeed : Player.speed;
       const move = new THREE.Vector3();
 
       if (Input.keys['KeyW']) move.z -= 1;
@@ -1868,7 +1838,6 @@
       if (Input.keys['KeyA']) move.x -= 1;
       if (Input.keys['KeyD']) move.x += 1;
 
-      // Add mobile joystick vectors
       if (Input.touchMoveDir.lengthSq() > 0.01) {
         move.x += Input.touchMoveDir.x;
         move.z += Input.touchMoveDir.y;
@@ -1882,8 +1851,8 @@
       if (move.lengthSq() > 0.01) {
         move.normalize();
         move.applyAxisAngle(new THREE.Vector3(0, 1, 0), Player.rotation.y);
-        Player.position.x += move.x * curSpeed * dt;
-        Player.position.z += move.z * curSpeed * dt;
+        Player.position.x += move.x * spd * dt;
+        Player.position.z += move.z * spd * dt;
       }
     }
 
@@ -1893,14 +1862,13 @@
     renderer.render(scene, camera);
   }
 
-  // Handle Window Resize
   window.addEventListener('resize', () => {
     camera.aspect = window.innerWidth / window.innerHeight;
     camera.updateProjectionMatrix();
     renderer.setSize(window.innerWidth, window.innerHeight);
   });
 
-  // Start Rendering
+  // Start engine loop
   gameLoop();
   </script>
 </body>
