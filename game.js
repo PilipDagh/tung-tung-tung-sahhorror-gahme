@@ -93,12 +93,12 @@ const Viewmodel = {
   }
 };
 
-// 2. PLAYER CONTROLLER WITH INTRO CUTSCENE & UNDER-BED LOOK
+// 2. PLAYER CONTROLLER WITH INTRO CUTSCENE & NON-STICKING AABB COLLISION
 const Player = {
   position: new THREE.Vector3(-6.6, 5.8, 8.5),
   velocity: new THREE.Vector3(),
   rotation: new THREE.Euler(0, 0, 0, 'YXZ'),
-  radius: 0.38,
+  radius: 0.35,
   height: 1.75,
   health: 100,
   isCrouched: false,
@@ -112,52 +112,90 @@ const Player = {
   isGrounded: false,
 
   init(camera, scene) {
-    this.flashlight = new THREE.SpotLight(0xfff5e4, 2.4, 24, Math.PI * 0.24, 0.35, 1.2);
+    this.flashlight = new THREE.SpotLight(0xfff5e4, 2.6, 24, Math.PI * 0.24, 0.35, 1.2);
     scene.add(this.flashlight);
     scene.add(this.flashlight.target);
     Viewmodel.init(camera);
+  },
+
+  updateFlashlight(camera) {
+    if (!this.flashlight) return;
+    this.flashlight.position.copy(camera.position);
+    const fwd = new THREE.Vector3(0, 0, -1).applyEuler(this.rotation);
+    this.flashlight.target.position.copy(camera.position).add(fwd);
+  },
+
+  prepareBedPose(camera) {
+    this.isIntroPlaying = true;
+    this.introTimer = 0;
+    this.isHiding = false;
+    this.position.set(-9.0, 5.8, 10.5);
+    this.rotation.set(0.85, 0, 0);
+
+    if (camera) {
+      camera.position.set(-9.0, 7.45, 10.5);
+      camera.quaternion.setFromEuler(this.rotation);
+      this.updateFlashlight(camera);
+    }
   },
 
   startWakeUpIntro() {
     this.isIntroPlaying = true;
     this.introTimer = 0;
     this.isHiding = false;
-    this.rotation.set(0.85, 0, 0.12); // Lying down on pillow facing ceiling
 
     const eyelid = document.getElementById('eyelid-overlay');
-    eyelid.style.opacity = '1';
+    eyelid.style.opacity = '0.9';
 
-    // Wake-up Animation Timeline
-    setTimeout(() => { eyelid.style.opacity = '0.3'; }, 600);
-    setTimeout(() => { eyelid.style.opacity = '0.9'; }, 1100);
-    setTimeout(() => { eyelid.style.opacity = '0.0'; }, 1600);
+    // Wake-up Eyelid Blinking
+    setTimeout(() => { eyelid.style.opacity = '0.3'; }, 400);
+    setTimeout(() => { eyelid.style.opacity = '0.85'; }, 800);
+    setTimeout(() => { eyelid.style.opacity = '0.0'; }, 1300);
   },
 
   update(dt, camera) {
     // A. WAKE-UP BED CUTSCENE PROGRESSION
     if (this.isIntroPlaying) {
       this.introTimer += dt;
-      if (this.introTimer < 2.0) {
-        // Lying on bed groggily looking around
-        camera.position.set(-9.0, 7.25, 9.8);
-        this.rotation.x = 0.85 - Math.sin(this.introTimer * 2) * 0.15;
-        this.rotation.y = Math.cos(this.introTimer * 1.5) * 0.25;
-      } else if (this.introTimer < 3.4) {
-        // Sitting up on edge of bed
-        const progress = (this.introTimer - 2.0) / 1.4;
-        camera.position.lerpVectors(new THREE.Vector3(-9.0, 7.25, 9.8), new THREE.Vector3(-8.2, 7.1, 8.8), progress);
-        this.rotation.x = THREE.MathUtils.lerp(0.7, 0.0, progress);
-        this.rotation.y = THREE.MathUtils.lerp(0.2, -Math.PI * 0.5, progress);
-      } else if (this.introTimer < 4.2) {
-        // Stepping off the mattress onto the open floor outside bed collider!
-        const progress = (this.introTimer - 3.4) / 0.8;
-        camera.position.lerpVectors(new THREE.Vector3(-8.2, 7.1, 8.8), new THREE.Vector3(-6.6, 7.4, 8.5), progress);
+
+      if (this.introTimer < 1.5) {
+        // Phase 1: Lying flat on pillow, groggily looking around ceiling
+        camera.position.set(-9.0, 7.45, 10.5);
+        this.rotation.x = 0.85 - Math.sin(this.introTimer * 2.5) * 0.08;
+        this.rotation.y = Math.cos(this.introTimer * 1.8) * 0.18;
+        this.rotation.z = Math.sin(this.introTimer * 2.0) * 0.06;
+      } else if (this.introTimer < 3.2) {
+        // Phase 2: Sitting up on edge of mattress
+        const t = (this.introTimer - 1.5) / 1.7;
+        camera.position.x = THREE.MathUtils.lerp(-9.0, -8.3, t);
+        camera.position.y = THREE.MathUtils.lerp(7.45, 7.4, t);
+        camera.position.z = THREE.MathUtils.lerp(10.5, 9.4, t);
+
+        this.rotation.x = THREE.MathUtils.lerp(0.85, 0.0, t);
+        this.rotation.y = THREE.MathUtils.lerp(0.0, -Math.PI * 0.5, t);
+        this.rotation.z = THREE.MathUtils.lerp(this.rotation.z, 0.0, t);
+      } else if (this.introTimer < 4.4) {
+        // Phase 3: Stepping down off mattress onto open floor
+        const t = (this.introTimer - 3.2) / 1.2;
+        camera.position.x = THREE.MathUtils.lerp(-8.3, -6.6, t);
+        camera.position.y = THREE.MathUtils.lerp(7.4, 7.42, t);
+        camera.position.z = THREE.MathUtils.lerp(9.4, 8.5, t);
       } else {
-        // Intro complete! Full movement control unlocked
+        // Phase 4: Cutscene complete -> unlock player control
         this.isIntroPlaying = false;
-        this.position.set(-6.6, 5.8, 8.5); // Safely on open bedroom floor!
+        this.position.set(-6.6, 5.8, 8.5);
+        this.velocity.set(0, 0, 0);
+
+        document.getElementById('hud').style.display = 'block';
+        if (document.getElementById('opt-mobile-mode').checked) {
+          document.getElementById('mobile-controls').style.display = 'block';
+        } else {
+          document.getElementById('click-to-focus').style.display = 'flex';
+        }
       }
+
       camera.quaternion.setFromEuler(this.rotation);
+      this.updateFlashlight(camera);
       return;
     }
 
@@ -166,7 +204,8 @@ const Player = {
       if (this.hidingSpot) {
         camera.position.copy(this.hidingSpot.position);
       }
-      camera.quaternion.setFromEuler(this.rotation); // Fully look around while hiding!
+      camera.quaternion.setFromEuler(this.rotation);
+      this.updateFlashlight(camera);
       return;
     }
 
@@ -178,6 +217,7 @@ const Player = {
     if (Input.keys['KeyA']) move.x -= 1;
     if (Input.keys['KeyD']) move.x += 1;
 
+    // Mobile touch joystick
     if (Input.touchMoveDir.lengthSq() > 0.01) {
       move.x += Input.touchMoveDir.x;
       move.z += Input.touchMoveDir.y;
@@ -191,65 +231,128 @@ const Player = {
 
     // Gravity
     this.velocity.y -= 22 * dt;
+    if (this.velocity.y < -30) this.velocity.y = -30;
+
     const dx = move.x * curSpeed * dt;
     const dz = move.z * curSpeed * dt;
     const dy = this.velocity.y * dt;
 
-    // Swept AABB Collision Resolution
-    this.resolveMovement(dx, 0, 0);
-    this.resolveMovement(0, 0, dz);
-    this.resolveMovement(0, dy, 0);
+    // Move horizontal axes independently (walls never get stuck on floors)
+    if (dx !== 0) this.moveAxis(dx, 0);
+    if (dz !== 0) this.moveAxis(dz, 2);
+
+    // Move vertical axis (gravity, floor landings, stair steps)
+    this.moveVertical(dy);
 
     // Eye Height & Camera
     const eyeHeight = this.isCrouched ? 0.95 : 1.62;
     camera.position.set(this.position.x, this.position.y + eyeHeight, this.position.z);
     camera.quaternion.setFromEuler(this.rotation);
 
-    // Dynamic Flashlight
-    this.flashlight.position.copy(camera.position);
-    const fwd = new THREE.Vector3(0, 0, -1).applyEuler(this.rotation);
-    this.flashlight.target.position.copy(camera.position).add(fwd);
-
+    this.updateFlashlight(camera);
     Viewmodel.animateBob(dt, isMoving);
   },
 
-  resolveMovement(dx, dy, dz) {
-    const targetPos = this.position.clone().add(new THREE.Vector3(dx, dy, dz));
-    const playerBox = new THREE.Box3();
+  // SOLID WALL COLLISION WITH STAIR STEP-UP (NEVER STICKS TO FLOORS)
+  moveAxis(delta, axisIndex) {
+    const target = this.position.clone();
+    if (axisIndex === 0) target.x += delta;
+    if (axisIndex === 2) target.z += delta;
 
-    const updateBox = (p) => {
-      playerBox.min.set(p.x - this.radius, p.y, p.z - this.radius);
-      playerBox.max.set(p.x + this.radius, p.y + this.height, p.z + this.radius);
-    };
+    const pMinX = target.x - this.radius;
+    const pMaxX = target.x + this.radius;
+    const pMinZ = target.z - this.radius;
+    const pMaxZ = target.z + this.radius;
+    const pMinY = target.y;
+    const pMaxY = target.y + (this.isCrouched ? 1.0 : this.height);
+    const maxStepHeight = 0.48;
 
-    updateBox(targetPos);
+    let stepUpY = target.y;
 
     for (const box of CollisionWorld.boxes) {
-      if (playerBox.intersectsBox(box)) {
-        // Automatic Stair Step Climbing (Heights <= 0.48m)
-        const stepH = box.max.y - this.position.y;
-        if (stepH > 0 && stepH <= 0.48 && dy <= 0) {
-          this.position.y = box.max.y;
-          this.velocity.y = 0;
-          this.isGrounded = true;
-          return;
+      const xOverlap = pMinX < box.max.x && pMaxX > box.min.x;
+      const zOverlap = pMinZ < box.max.z && pMaxZ > box.min.z;
+
+      if (xOverlap && zOverlap) {
+        // Floor slab underneath feet -> never blocks horizontal walking!
+        if (box.max.y <= pMinY + 0.06) {
+          continue;
         }
 
-        // Floor Contact
-        if (dy < 0) {
-          this.position.y = box.max.y;
-          this.velocity.y = 0;
-          this.isGrounded = true;
-          return;
-        } else if (dy > 0) { // Ceiling
-          this.velocity.y = 0;
-          return;
+        // Ceiling above head -> never blocks horizontal walking!
+        if (box.min.y >= pMaxY - 0.06) {
+          continue;
         }
-        return; // Block horizontal clipping
+
+        // Stair Step Climbing
+        const heightDiff = box.max.y - pMinY;
+        if (heightDiff > 0.06 && heightDiff <= maxStepHeight) {
+          if (box.max.y > stepUpY) {
+            stepUpY = box.max.y;
+          }
+          continue;
+        }
+
+        // Solid wall or tall obstacle -> block horizontal axis
+        return;
       }
     }
 
-    this.position.add(new THREE.Vector3(dx, dy, dz));
+    if (axisIndex === 0) this.position.x = target.x;
+    if (axisIndex === 2) this.position.z = target.z;
+    this.position.y = stepUpY;
+  },
+
+  // VERTICAL GRAVITY & FLOOR DETECTION
+  moveVertical(dy) {
+    const targetY = this.position.y + dy;
+    const pMinX = this.position.x - this.radius;
+    const pMaxX = this.position.x + this.radius;
+    const pMinZ = this.position.z - this.radius;
+    const pMaxZ = this.position.z + this.radius;
+    const pHeight = this.isCrouched ? 1.0 : this.height;
+
+    this.isGrounded = false;
+
+    if (dy <= 0) {
+      let highestFloor = -999;
+
+      for (const box of CollisionWorld.boxes) {
+        const xOverlap = pMinX < box.max.x && pMaxX > box.min.x;
+        const zOverlap = pMinZ < box.max.z && pMaxZ > box.min.z;
+
+        if (xOverlap && zOverlap) {
+          if (box.max.y <= this.position.y + 0.15 && box.max.y >= targetY - 0.1) {
+            if (box.max.y > highestFloor) {
+              highestFloor = box.max.y;
+            }
+          }
+        }
+      }
+
+      if (highestFloor > -900) {
+        this.position.y = highestFloor;
+        this.velocity.y = 0;
+        this.isGrounded = true;
+        return;
+      }
+
+      this.position.y = targetY;
+    } else {
+      for (const box of CollisionWorld.boxes) {
+        const xOverlap = pMinX < box.max.x && pMaxX > box.min.x;
+        const zOverlap = pMinZ < box.max.z && pMaxZ > box.min.z;
+
+        if (xOverlap && zOverlap) {
+          if (box.min.y >= this.position.y + pHeight && box.min.y <= targetY + pHeight) {
+            this.velocity.y = 0;
+            this.position.y = box.min.y - pHeight;
+            return;
+          }
+        }
+      }
+      this.position.y = targetY;
+    }
   },
 
   fireWeapon(camera) {
@@ -331,7 +434,6 @@ const Inventory = {
     scene.add(cur.group);
     cur.inInventory = false;
 
-    // Realistic Drop Physics
     House.droppedItems.push({
       item: cur,
       velocity: fwd.clone().multiplyScalar(4).add(new THREE.Vector3(0, 1.8, 0)),
@@ -366,10 +468,9 @@ function updateDroppedItemsPhysics(dt) {
     const d = House.droppedItems[i];
     if (d.landed) continue;
 
-    d.velocity.y -= 18 * dt; // Gravity
+    d.velocity.y -= 18 * dt;
     d.item.group.position.addScaledVector(d.velocity, dt);
 
-    // Floor Collision Check
     const pos = d.item.group.position;
     for (const box of CollisionWorld.boxes) {
       if (pos.x >= box.min.x && pos.x <= box.max.x && pos.z >= box.min.z && pos.z <= box.max.z) {
@@ -377,7 +478,6 @@ function updateDroppedItemsPhysics(dt) {
           pos.y = box.max.y + 0.12;
           d.landed = true;
 
-          // Sound Impact & Granny Alert
           audio.playItemDrop(d.item.name, Math.abs(d.velocity.y));
           const noiseRadius = (d.item.name.includes('Hammer') || d.item.name.includes('Vase') || d.item.name.includes('Shotgun')) ? 24 : 14;
           MonsterAI.hearNoise(pos, noiseRadius);
@@ -453,7 +553,7 @@ const MonsterAI = {
 
     if (this.state === 'STUNNED') {
       this.stunTimer -= dt;
-      this.mesh.rotation.z = 1.3; // Knocked sideways
+      this.mesh.rotation.z = 1.3;
       if (this.stunTimer <= 0) {
         this.state = 'PATROL';
         this.mesh.rotation.z = 0;
@@ -610,7 +710,6 @@ const NetworkEngine = {
       p.mesh.position.set(data.x, data.y, data.z);
       p.mesh.rotation.y = data.rotY;
 
-      // Player Collision against remote survivors
       if (Player.position.distanceTo(p.mesh.position) < 0.8) {
         const push = new THREE.Vector3().subVectors(Player.position, p.mesh.position).normalize().multiplyScalar(0.08);
         Player.position.add(push);
@@ -696,7 +795,7 @@ const Input = {
       const isLocked = document.pointerLockElement === container;
       const inGame = document.getElementById('hud').style.display === 'block';
       document.getElementById('click-to-focus').style.display =
-        (inGame && !isLocked && !document.getElementById('opt-mobile-mode').checked) ? 'flex' : 'none';
+        (inGame && !isLocked && !document.getElementById('opt-mobile-mode').checked && !Player.isIntroPlaying) ? 'flex' : 'none';
     });
 
     for (let i = 0; i < 5; i++) {
@@ -713,13 +812,15 @@ const Input = {
       let touchId = null, center = { x: 0, y: 0 };
 
       zone.addEventListener('touchstart', (e) => {
+        e.preventDefault();
         const t = e.changedTouches[0];
         touchId = t.identifier;
         const r = zone.getBoundingClientRect();
         center = { x: r.left + r.width / 2, y: r.top + r.height / 2 };
-      });
+      }, { passive: false });
 
       zone.addEventListener('touchmove', (e) => {
+        e.preventDefault();
         for (let i = 0; i < e.changedTouches.length; i++) {
           const t = e.changedTouches[i];
           if (t.identifier === touchId) {
@@ -733,15 +834,16 @@ const Input = {
             cb(kx / 45, ky / 45);
           }
         }
-      });
+      }, { passive: false });
 
-      const end = () => {
+      const end = (e) => {
+        e.preventDefault();
         touchId = null;
         knob.style.transform = 'translate(-50%, -50%)';
         cb(0, 0);
       };
-      zone.addEventListener('touchend', end);
-      zone.addEventListener('touchcancel', end);
+      zone.addEventListener('touchend', end, { passive: false });
+      zone.addEventListener('touchcancel', end, { passive: false });
     };
 
     bind('touch-move', 'knob-move', (x, y) => { this.touchMoveDir.set(x, y); });
@@ -822,26 +924,6 @@ function showPrompt(text) {
 }
 
 // 8. DAY PROGRESSION & JUMPSCARE SEQUENCE
-function showDaySplash(dayNum) {
-  const splash = document.getElementById('day-splash');
-  document.getElementById('day-title').innerText = `DAY ${dayNum}`;
-  document.getElementById('day-subtitle').innerText =
-    dayNum === 1 ? 'Find a way out before she catches you.' :
-    dayNum === 5 ? 'FINAL DAY. She will not spare you.' :
-    'You woke up with a pounding headache.';
-
-  splash.style.display = 'flex';
-  requestAnimationFrame(() => { splash.style.opacity = '1'; });
-
-  setTimeout(() => {
-    splash.style.opacity = '0';
-    setTimeout(() => {
-      splash.style.display = 'none';
-      Player.startWakeUpIntro();
-    }, 1200);
-  }, 2000);
-}
-
 function triggerJumpscare() {
   audio.stopChase();
   audio.playJumpscare();
@@ -865,7 +947,37 @@ function respawnPlayer() {
   document.getElementById('health-bar-fill').style.width = '100%';
   MonsterAI.mesh.position.set(0, 0.2, 0);
   MonsterAI.state = 'PATROL';
-  showDaySplash(GameState.day);
+  showDaySequence();
+}
+
+function showDaySequence() {
+  document.getElementById('hud').style.display = 'none';
+  document.getElementById('mobile-controls').style.display = 'none';
+  document.getElementById('click-to-focus').style.display = 'none';
+
+  const splash = document.getElementById('day-splash');
+  splash.style.transition = 'none';
+  splash.style.display = 'flex';
+  splash.style.opacity = '1';
+
+  document.getElementById('day-title').innerText = `DAY ${GameState.day}`;
+  document.getElementById('day-subtitle').innerText =
+    GameState.day === 1 ? 'Find a way out before she catches you.' :
+    GameState.day === 5 ? 'FINAL DAY. She will not spare you.' :
+    'You woke up with a pounding headache.';
+
+  Player.prepareBedPose(camera);
+
+  // Black screen holds for 2.2s -> then fades out to reveal bed
+  setTimeout(() => {
+    splash.style.transition = 'opacity 1.0s ease';
+    splash.style.opacity = '0';
+
+    setTimeout(() => {
+      splash.style.display = 'none';
+      Player.startWakeUpIntro();
+    }, 1000);
+  }, 2200);
 }
 
 function triggerVictory(method) {
@@ -876,7 +988,6 @@ function triggerVictory(method) {
 // 9. SETTINGS & UI CONTROLLER
 const SettingsEngine = {
   init(renderer, camera, scene) {
-    // FOV Slider
     const fovEl = document.getElementById('opt-fov');
     fovEl.oninput = (e) => {
       camera.fov = parseFloat(e.target.value);
@@ -884,7 +995,6 @@ const SettingsEngine = {
       document.getElementById('opt-fov-val').innerText = `${e.target.value}°`;
     };
 
-    // Gamma Slider
     const gammaEl = document.getElementById('opt-gamma');
     gammaEl.oninput = (e) => {
       const v = parseFloat(e.target.value);
@@ -894,14 +1004,12 @@ const SettingsEngine = {
       document.getElementById('opt-gamma-val').innerText = `${v.toFixed(1)}`;
     };
 
-    // Resolution Scale
     const resEl = document.getElementById('opt-res');
     resEl.oninput = (e) => {
       renderer.setPixelRatio(Math.min(window.devicePixelRatio, parseFloat(e.target.value)));
       document.getElementById('opt-res-val').innerText = `${e.target.value}x`;
     };
 
-    // Fog Density
     const fogEl = document.getElementById('opt-fog');
     fogEl.onchange = (e) => {
       const v = e.target.value;
@@ -911,30 +1019,28 @@ const SettingsEngine = {
       else if (v === 'heavy') scene.fog.density = 0.12;
     };
 
-    // Sensitivity Slider
     const sensEl = document.getElementById('opt-sens');
     sensEl.oninput = (e) => {
       Input.mouseSens = 0.0022 * parseFloat(e.target.value);
       document.getElementById('opt-sens-val').innerText = `${e.target.value}`;
     };
 
-    // Invert Y
     document.getElementById('opt-inverty').onchange = (e) => {
       Input.invertY = e.target.checked ? -1 : 1;
     };
 
-    // Crosshairs
     document.getElementById('opt-crosshair').onchange = (e) => {
       document.getElementById('crosshair').className = e.target.value;
     };
 
-    // Mobile Mode Toggle
     document.getElementById('opt-mobile-mode').onchange = (e) => {
-      document.getElementById('mobile-controls').style.display = e.target.checked ? 'block' : 'none';
-      if (!e.target.checked) document.getElementById('click-to-focus').style.display = 'flex';
+      const inGame = document.getElementById('hud').style.display === 'block';
+      if (inGame) {
+        document.getElementById('mobile-controls').style.display = e.target.checked ? 'block' : 'none';
+        if (!e.target.checked) document.getElementById('click-to-focus').style.display = 'flex';
+      }
     };
 
-    // Audio Mixers
     const updateVols = () => {
       const m = parseFloat(document.getElementById('opt-vol-master').value);
       const s = parseFloat(document.getElementById('opt-vol-sfx').value);
@@ -945,7 +1051,6 @@ const SettingsEngine = {
     document.getElementById('opt-vol-sfx').oninput = updateVols;
     document.getElementById('opt-vol-music').oninput = updateVols;
 
-    // Tabs
     ['gfx', 'ctrl', 'audio', 'prof'].forEach(tab => {
       document.getElementById(`tab-btn-${tab}`).onclick = () => {
         ['gfx', 'ctrl', 'audio', 'prof'].forEach(t => {
@@ -1010,14 +1115,7 @@ document.getElementById('sp-start').onclick = () => {
 function startGame() {
   audio.init();
   showScreen('');
-  document.getElementById('hud').style.display = 'block';
-
-  if (document.getElementById('opt-mobile-mode').checked) {
-    document.getElementById('mobile-controls').style.display = 'block';
-  } else {
-    canvasContainer.requestPointerLock();
-  }
-  respawnPlayer();
+  showDaySequence();
 }
 
 // Multiplayer UI Helpers
@@ -1058,184 +1156,175 @@ document.getElementById('btn-join-code').onclick = () => {
       type: 'JOIN',
       sender: NetworkEngine.myId,
       name: document.getElementById('prof-name').value,
-       wardrobe: {
-            shirt: document.getElementById('wardrobe-shirt').value,
-            skin: document.getElementById('wardrobe-skin').value
-          }
-        });
-        updateRoomUI();
+      wardrobe: {
+        shirt: document.getElementById('wardrobe-shirt').value,
+        skin: document.getElementById('wardrobe-skin').value
       }
-    };
-
-    function renderLobbyCard(data) {
-      const list = document.getElementById('lobbies-list');
-      if (list.querySelector(`[data-code="${data.code}"]`)) return;
-      if (list.innerText.includes('Scanning') || list.innerText.includes('Click SYNC')) {
-        list.innerHTML = '';
-      }
-
-      const div = document.createElement('div');
-      div.setAttribute('data-code', data.code);
-      div.style.cssText = 'padding:7px; border-bottom:1px solid #333; display:flex; justify-content:space-between; align-items:center;';
-      div.innerHTML = `
-        <span><b>${data.name}</b> [${data.code}] (${data.count}/${data.max})</span>
-        <button class="menu-btn small">JOIN</button>
-      `;
-
-      div.querySelector('button').onclick = () => {
-        NetworkEngine.roomCode = data.code;
-        NetworkEngine.roomName = data.name;
-        document.getElementById('mp-lobby-browser').style.display = 'none';
-        document.getElementById('mp-lobby-room').style.display = 'block';
-        document.getElementById('room-header').innerText = `LOBBY: ${data.name}`;
-        document.getElementById('room-code-display').innerText = data.code;
-
-        NetworkEngine.client.subscribe(`granny_v4_room/${data.code}`);
-        NetworkEngine.broadcast(`granny_v4_room/${data.code}`, {
-          type: 'JOIN',
-          sender: NetworkEngine.myId,
-          name: document.getElementById('prof-name').value,
-          wardrobe: {
-            shirt: document.getElementById('wardrobe-shirt').value,
-            skin: document.getElementById('wardrobe-skin').value
-          }
-        });
-        updateRoomUI();
-      };
-
-      list.appendChild(div);
-    }
-
-    function updateRoomUI() {
-      const count = Object.keys(NetworkEngine.peers).length + 1;
-      document.getElementById('room-player-count').innerText = count;
-      const list = document.getElementById('room-player-list');
-      list.innerHTML = `<li>${document.getElementById('prof-name').value} (You)</li>`;
-      
-      Object.values(NetworkEngine.peers).forEach(p => {
-        list.innerHTML += `<li>${p.name || 'Survivor'}</li>`;
-      });
-
-      if (NetworkEngine.isHost && count >= 2) {
-        document.getElementById('btn-start-multiplayer-game').style.display = 'block';
-        document.getElementById('waiting-msg').style.display = 'none';
-      }
-    }
-
-    document.getElementById('btn-start-multiplayer-game').onclick = () => {
-      NetworkEngine.broadcast(`granny_v4_room/${NetworkEngine.roomCode}`, {
-        type: 'START',
-        sender: NetworkEngine.myId
-      });
-      startGame();
-    };
-
-    // 11. WARDROBE 3D PREVIEW RIG
-    const WardrobePreview = {
-      renderer: null,
-      scene: null,
-      camera: null,
-      avatarGroup: null,
-      bodyMesh: null,
-      headMesh: null,
-      legsMesh: null,
-
-      init() {
-        const containerBox = document.getElementById('wardrobe-canvas');
-        if (!containerBox || this.renderer) return;
-
-        this.scene = new THREE.Scene();
-        this.camera = new THREE.PerspectiveCamera(45, containerBox.clientWidth / containerBox.clientHeight, 0.1, 10);
-        this.camera.position.set(0, 1.3, 2.8);
-
-        this.renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
-        this.renderer.setSize(containerBox.clientWidth, containerBox.clientHeight);
-        containerBox.appendChild(this.renderer.domElement);
-
-        const dirLight = new THREE.DirectionalLight(0xffffff, 1.4);
-        dirLight.position.set(1, 2, 2);
-        this.scene.add(dirLight);
-        this.scene.add(new THREE.AmbientLight(0x555555));
-
-        this.avatarGroup = new THREE.Group();
-
-        // Torso / Shirt
-        this.bodyMesh = new THREE.Mesh(
-          new THREE.CylinderGeometry(0.3, 0.3, 1.0, 12),
-          new THREE.MeshStandardMaterial({ color: document.getElementById('wardrobe-shirt').value, roughness: 0.7 })
-        );
-        this.bodyMesh.position.y = 0.9;
-        this.avatarGroup.add(this.bodyMesh);
-
-        // Head / Skin
-        this.headMesh = new THREE.Mesh(
-          new THREE.SphereGeometry(0.24, 16, 16),
-          new THREE.MeshStandardMaterial({ color: document.getElementById('wardrobe-skin').value, roughness: 0.8 })
-        );
-        this.headMesh.position.y = 1.62;
-        this.avatarGroup.add(this.headMesh);
-
-        // Pants / Legs
-        this.legsMesh = new THREE.Mesh(
-          new THREE.CylinderGeometry(0.32, 0.32, 0.5, 12),
-          new THREE.MeshStandardMaterial({ color: document.getElementById('wardrobe-pants').value, roughness: 0.9 })
-        );
-        this.legsMesh.position.y = 0.25;
-        this.avatarGroup.add(this.legsMesh);
-
-        this.scene.add(this.avatarGroup);
-        this.animate();
-
-        // Live Color Inputs
-        document.getElementById('wardrobe-shirt').oninput = (e) => {
-          this.bodyMesh.material.color.set(e.target.value);
-        };
-        document.getElementById('wardrobe-skin').oninput = (e) => {
-          this.headMesh.material.color.set(e.target.value);
-        };
-        document.getElementById('wardrobe-pants').oninput = (e) => {
-          this.legsMesh.material.color.set(e.target.value);
-        };
-      },
-
-      animate() {
-        requestAnimationFrame(() => this.animate());
-        if (this.avatarGroup) this.avatarGroup.rotation.y += 0.015;
-        if (this.renderer) this.renderer.render(this.scene, this.camera);
-      }
-    };
-
-    // Hook Wardrobe button to initialize its 3D canvas
-    const origWardrobeBtn = document.getElementById('btn-wardrobe').onclick;
-    document.getElementById('btn-wardrobe').onclick = () => {
-      showScreen('wardrobe-modal');
-      WardrobePreview.init();
-    };
-
-    // 12. RUNTIME TICKING & MASTER RENDER LOOP
-    let lastTime = performance.now();
-    setInterval(() => { NetworkEngine.tickSync(); }, 50); // 20Hz Networking Sync
-
-    function gameLoop() {
-      requestAnimationFrame(gameLoop);
-      const now = performance.now();
-      const dt = Math.min((now - lastTime) / 1000, 0.08);
-      lastTime = now;
-
-      // Update Systems
-      Player.update(dt, camera);
-      MonsterAI.update(dt);
-      updateDroppedItemsPhysics(dt);
-
-      renderer.render(scene, camera);
-    }
-
-    // Handle Window Resizing
-    window.addEventListener('resize', () => {
-      camera.aspect = window.innerWidth / window.innerHeight;
-      camera.updateProjectionMatrix();
-      renderer.setSize(window.innerWidth, window.innerHeight);
     });
+    updateRoomUI();
+  }
+};
 
-    // Start Engine
-    gameLoop();
+function renderLobbyCard(data) {
+  const list = document.getElementById('lobbies-list');
+  if (list.querySelector(`[data-code="${data.code}"]`)) return;
+  if (list.innerText.includes('Scanning') || list.innerText.includes('Click SYNC')) {
+    list.innerHTML = '';
+  }
+
+  const div = document.createElement('div');
+  div.setAttribute('data-code', data.code);
+  div.style.cssText = 'padding:7px; border-bottom:1px solid #333; display:flex; justify-content:space-between; align-items:center;';
+  div.innerHTML = `
+    <span><b>${data.name}</b> [${data.code}] (${data.count}/${data.max})</span>
+    <button class="menu-btn small">JOIN</button>
+  `;
+
+  div.querySelector('button').onclick = () => {
+    NetworkEngine.roomCode = data.code;
+    NetworkEngine.roomName = data.name;
+    document.getElementById('mp-lobby-browser').style.display = 'none';
+    document.getElementById('mp-lobby-room').style.display = 'block';
+    document.getElementById('room-header').innerText = `LOBBY: ${data.name}`;
+    document.getElementById('room-code-display').innerText = data.code;
+
+    NetworkEngine.client.subscribe(`granny_v4_room/${data.code}`);
+    NetworkEngine.broadcast(`granny_v4_room/${data.code}`, {
+      type: 'JOIN',
+      sender: NetworkEngine.myId,
+      name: document.getElementById('prof-name').value,
+      wardrobe: {
+        shirt: document.getElementById('wardrobe-shirt').value,
+        skin: document.getElementById('wardrobe-skin').value
+      }
+    });
+    updateRoomUI();
+  };
+
+  list.appendChild(div);
+}
+
+function updateRoomUI() {
+  const count = Object.keys(NetworkEngine.peers).length + 1;
+  document.getElementById('room-player-count').innerText = count;
+  const list = document.getElementById('room-player-list');
+  list.innerHTML = `<li>${document.getElementById('prof-name').value} (You)</li>`;
+  
+  Object.values(NetworkEngine.peers).forEach(p => {
+    list.innerHTML += `<li>${p.name || 'Survivor'}</li>`;
+  });
+
+  if (NetworkEngine.isHost && count >= 2) {
+    document.getElementById('btn-start-multiplayer-game').style.display = 'block';
+    document.getElementById('waiting-msg').style.display = 'none';
+  }
+}
+
+document.getElementById('btn-start-multiplayer-game').onclick = () => {
+  NetworkEngine.broadcast(`granny_v4_room/${NetworkEngine.roomCode}`, {
+    type: 'START',
+    sender: NetworkEngine.myId
+  });
+  startGame();
+};
+
+// 11. WARDROBE 3D PREVIEW RIG
+const WardrobePreview = {
+  renderer: null,
+  scene: null,
+  camera: null,
+  avatarGroup: null,
+  bodyMesh: null,
+  headMesh: null,
+  legsMesh: null,
+
+  init() {
+    const containerBox = document.getElementById('wardrobe-canvas');
+    if (!containerBox || this.renderer) return;
+
+    this.scene = new THREE.Scene();
+    this.camera = new THREE.PerspectiveCamera(45, containerBox.clientWidth / containerBox.clientHeight, 0.1, 10);
+    this.camera.position.set(0, 1.3, 2.8);
+
+    this.renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
+    this.renderer.setSize(containerBox.clientWidth, containerBox.clientHeight);
+    containerBox.appendChild(this.renderer.domElement);
+
+    const dirLight = new THREE.DirectionalLight(0xffffff, 1.4);
+    dirLight.position.set(1, 2, 2);
+    this.scene.add(dirLight);
+    this.scene.add(new THREE.AmbientLight(0x555555));
+
+    this.avatarGroup = new THREE.Group();
+
+    this.bodyMesh = new THREE.Mesh(
+      new THREE.CylinderGeometry(0.3, 0.3, 1.0, 12),
+      new THREE.MeshStandardMaterial({ color: document.getElementById('wardrobe-shirt').value, roughness: 0.7 })
+    );
+    this.bodyMesh.position.y = 0.9;
+    this.avatarGroup.add(this.bodyMesh);
+
+    this.headMesh = new THREE.Mesh(
+      new THREE.SphereGeometry(0.24, 16, 16),
+      new THREE.MeshStandardMaterial({ color: document.getElementById('wardrobe-skin').value, roughness: 0.8 })
+    );
+    this.headMesh.position.y = 1.62;
+    this.avatarGroup.add(this.headMesh);
+
+    this.legsMesh = new THREE.Mesh(
+      new THREE.CylinderGeometry(0.32, 0.32, 0.5, 12),
+      new THREE.MeshStandardMaterial({ color: document.getElementById('wardrobe-pants').value, roughness: 0.9 })
+    );
+    this.legsMesh.position.y = 0.25;
+    this.avatarGroup.add(this.legsMesh);
+
+    this.scene.add(this.avatarGroup);
+    this.animate();
+
+    document.getElementById('wardrobe-shirt').oninput = (e) => {
+      this.bodyMesh.material.color.set(e.target.value);
+    };
+    document.getElementById('wardrobe-skin').oninput = (e) => {
+      this.headMesh.material.color.set(e.target.value);
+    };
+    document.getElementById('wardrobe-pants').oninput = (e) => {
+      this.legsMesh.material.color.set(e.target.value);
+    };
+  },
+
+  animate() {
+    requestAnimationFrame(() => this.animate());
+    if (this.avatarGroup) this.avatarGroup.rotation.y += 0.015;
+    if (this.renderer) this.renderer.render(this.scene, this.camera);
+  }
+};
+
+document.getElementById('btn-wardrobe').onclick = () => {
+  showScreen('wardrobe-modal');
+  WardrobePreview.init();
+};
+
+// 12. RUNTIME TICKING & MASTER RENDER LOOP
+let lastTime = performance.now();
+setInterval(() => { NetworkEngine.tickSync(); }, 50);
+
+function gameLoop() {
+  requestAnimationFrame(gameLoop);
+  const now = performance.now();
+  const dt = Math.min((now - lastTime) / 1000, 0.08);
+  lastTime = now;
+
+  Player.update(dt, camera);
+  MonsterAI.update(dt);
+  updateDroppedItemsPhysics(dt);
+
+  renderer.render(scene, camera);
+}
+
+window.addEventListener('resize', () => {
+  camera.aspect = window.innerWidth / window.innerHeight;
+  camera.updateProjectionMatrix();
+  renderer.setSize(window.innerWidth, window.innerHeight);
+});
+
+gameLoop();
