@@ -4,197 +4,35 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
   <title>Granny: Tung Tung Sahur Edition</title>
-
-  <!-- 3D Graphics Engine & Real-Time Multiplayer Broker -->
+  
+  <link rel="stylesheet" href="style.css" />
+  <!-- Three.js Engine & Paho MQTT Networking -->
   <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/paho-mqtt/1.0.1/mqttws31.min.js"></script>
-
-  <style>
-    :root {
-      --blood: #850000;
-      --blood-bright: #ff0000;
-      --panel: rgba(12, 12, 12, 0.96);
-      --font-horror: 'Courier New', Courier, monospace;
-    }
-    * { box-sizing: border-box; user-select: none; margin: 0; padding: 0; }
-    html, body {
-      width: 100%; height: 100%; overflow: hidden;
-      background: #000; color: #eee; font-family: var(--font-horror);
-    }
-    #canvas-container {
-      width: 100%; height: 100%; position: absolute; top: 0; left: 0; z-index: 1;
-    }
-
-    /* CLICK TO LOCK SCREEN OVERLAY */
-    #click-to-focus {
-      position: absolute; top: 0; left: 0; width: 100%; height: 100%;
-      background: rgba(0,0,0,0.55); z-index: 30; display: none;
-      flex-direction: column; align-items: center; justify-content: center;
-      cursor: pointer;
-    }
-    #click-to-focus h2 {
-      font-size: 28px; color: #fff; text-shadow: 0 0 10px var(--blood-bright);
-      letter-spacing: 3px; animation: pulseFocus 1.4s infinite alternate;
-    }
-    @keyframes pulseFocus { 0% { opacity: 0.6; } 100% { opacity: 1; } }
-
-    /* RETICLE */
-    #crosshair {
-      position: absolute; top: 50%; left: 50%;
-      transform: translate(-50%, -50%);
-      pointer-events: none; z-index: 10;
-    }
-    .reticle-dot { width: 6px; height: 6px; background: rgba(255,255,255,0.85); border-radius: 50%; }
-    .reticle-cross { width: 16px; height: 16px; border: 2px solid rgba(255,255,255,0.8); }
-    .reticle-ring { width: 22px; height: 22px; border: 2px solid rgba(255,255,255,0.6); border-radius: 50%; }
-
-    /* HUD */
-    #hud {
-      position: absolute; top: 0; left: 0; width: 100%; height: 100%;
-      pointer-events: none; z-index: 15; display: none;
-    }
-    #hud-top {
-      position: absolute; top: 16px; left: 20px; right: 20px;
-      display: flex; justify-content: space-between; align-items: center;
-    }
-    #stealth-indicator {
-      font-size: 13px; color: #aaa; background: rgba(0,0,0,0.7);
-      padding: 6px 14px; border: 1px solid #444; border-radius: 3px;
-    }
-    #stealth-indicator.hidden { color: #00ff66; border-color: #00ff66; text-shadow: 0 0 5px #00ff66; }
-    #health-bar-container {
-      width: 140px; height: 14px; background: #222; border: 1px solid #555; border-radius: 2px;
-    }
-    #health-bar-fill { width: 100%; height: 100%; background: var(--blood-bright); transition: width 0.2s; }
-    #interaction-prompt {
-      position: absolute; top: 58%; left: 50%; transform: translateX(-50%);
-      background: rgba(0,0,0,0.85); border: 1px solid var(--blood);
-      padding: 7px 18px; font-size: 14px; letter-spacing: 1px;
-      color: #ffcccc; display: none; text-shadow: 0 0 6px var(--blood-bright);
-    }
-    #inventory-bar {
-      position: absolute; bottom: 20px; left: 50%; transform: translateX(-50%);
-      display: flex; gap: 10px; background: rgba(10,10,10,0.92);
-      padding: 8px 14px; border: 1px solid #444; border-radius: 4px; pointer-events: auto;
-    }
-    .inv-slot {
-      width: 58px; height: 58px; border: 1px solid #555; background: #161616;
-      display: flex; flex-direction: column; align-items: center; justify-content: center;
-      font-size: 10px; text-align: center; color: #bbb; cursor: pointer;
-    }
-    .inv-slot.active { border-color: var(--blood-bright); box-shadow: 0 0 10px var(--blood); color: #fff; }
-    .inv-slot span.slot-num { font-size: 9px; color: #666; margin-bottom: 2px; }
-
-    /* DAY SPLASH & JUMPSCARE */
-    #day-splash {
-      position: absolute; top: 0; left: 0; width: 100%; height: 100%;
-      background: #000; display: none; flex-direction: column;
-      align-items: center; justify-content: center; z-index: 100;
-      opacity: 0; pointer-events: none; transition: opacity 1.2s ease;
-    }
-    #day-splash h1 { font-size: clamp(38px, 8vw, 76px); color: #ccc; letter-spacing: 8px; }
-    #day-splash p { font-size: 16px; color: #888; margin-top: 10px; }
-    #jumpscare-overlay {
-      position: absolute; top: 0; left: 0; width: 100%; height: 100%;
-      background: radial-gradient(circle, transparent 15%, #660000 80%, #000 100%);
-      z-index: 95; display: none; pointer-events: none;
-    }
-
-    /* MOBILE CONTROLS (DISABLED BY DEFAULT ON PC) */
-    #mobile-controls {
-      position: absolute; top: 0; left: 0; width: 100%; height: 100%;
-      pointer-events: none; z-index: 25; display: none;
-    }
-    .touch-zone {
-      position: absolute; bottom: 30px; width: 130px; height: 130px;
-      background: rgba(255,255,255,0.07); border: 2px dashed rgba(255,255,255,0.25);
-      border-radius: 50%; pointer-events: auto; touch-action: none;
-    }
-    #touch-move { left: 25px; }
-    #touch-look { right: 25px; }
-    .joystick-knob {
-      position: absolute; width: 44px; height: 44px; top: 50%; left: 50%;
-      transform: translate(-50%, -50%); background: rgba(255,255,255,0.5);
-      border-radius: 50%; pointer-events: none;
-    }
-    #mobile-buttons {
-      position: absolute; bottom: 175px; right: 20px;
-      display: flex; flex-direction: column; gap: 10px; pointer-events: auto;
-    }
-    .mob-btn {
-      width: 55px; height: 55px; background: rgba(20,20,20,0.85);
-      border: 1px solid #777; color: #fff; border-radius: 50%;
-      font-size: 11px; font-weight: bold; display: flex; align-items: center;
-      justify-content: center; text-transform: uppercase;
-    }
-    .mob-btn:active { background: var(--blood-bright); }
-
-    /* MENUS */
-    .menu-screen {
-      position: absolute; top: 0; left: 0; width: 100%; height: 100%;
-      background: radial-gradient(circle at center, #200000 0%, #060606 85%);
-      display: flex; flex-direction: column; align-items: center; justify-content: center;
-      z-index: 50; overflow-y: auto; padding: 20px;
-    }
-    h1.title {
-      font-size: clamp(30px, 6vw, 64px); color: var(--blood-bright);
-      text-shadow: 0 0 20px #000, 0 0 25px var(--blood); letter-spacing: 5px;
-      margin-bottom: 25px; text-align: center;
-    }
-    .menu-btn {
-      width: 280px; padding: 13px; margin: 8px 0; background: #121212;
-      border: 1px solid #444; color: #ddd; font-family: var(--font-horror);
-      font-size: 15px; letter-spacing: 2px; text-transform: uppercase;
-      cursor: pointer; transition: all 0.2s; text-align: center;
-    }
-    .menu-btn:hover { background: var(--blood); border-color: var(--blood-bright); color: #fff; }
-    .panel {
-      background: var(--panel); border: 1px solid #333; padding: 22px;
-      max-width: 620px; width: 100%; border-radius: 4px; max-height: 85vh; overflow-y: auto;
-    }
-    .tab-bar { display: flex; border-bottom: 1px solid #444; margin-bottom: 15px; }
-    .tab-btn {
-      flex: 1; padding: 10px; background: none; border: none; color: #888;
-      font-family: var(--font-horror); font-size: 13px; cursor: pointer; text-transform: uppercase;
-    }
-    .tab-btn.active { color: #fff; border-bottom: 2px solid var(--blood-bright); }
-    .setting-row {
-      display: flex; justify-content: space-between; align-items: center;
-      margin: 12px 0; font-size: 13px;
-    }
-    .setting-row label { color: #ccc; }
-    select, input[type="text"], input[type="range"] {
-      background: #1e1e1e; border: 1px solid #555; color: #fff;
-      padding: 6px 10px; font-family: var(--font-horror); font-size: 12px;
-    }
-    input[type="range"] { accent-color: var(--blood-bright); }
-    #wardrobe-canvas { width: 100%; height: 210px; background: #0c0c0c; border: 1px solid #222; margin-bottom: 12px; }
-    #net-status-pill {
-      font-size: 11px; padding: 4px 8px; border-radius: 3px; display: inline-block;
-      margin-bottom: 12px; background: #1a1a1a; border: 1px solid #333; color: #aaa;
-    }
-  </style>
 </head>
 <body>
   <div id="canvas-container"></div>
   <div id="crosshair" class="reticle-dot"></div>
+  <div id="eyelid-overlay"></div>
 
   <!-- CLICK TO LOCK MOUSE BANNER -->
   <div id="click-to-focus">
-    <h2>CLICK TO RESUME & LOCK MOUSE</h2>
-    <p style="color:#aaa;font-size:13px;margin-top:8px;">Move mouse to look around • WASD to move • E to interact</p>
+    <h2>CLICK SCREEN TO RESUME & LOCK MOUSE</h2>
+    <p>Move mouse to look • WASD to walk • E to interact / open • G to drop</p>
   </div>
 
-  <!-- HUD -->
+  <!-- IN-GAME HUD -->
   <div id="hud">
     <div id="hud-top">
       <div id="stealth-indicator">STEALTH: STANDING</div>
-      <div style="display:flex;align-items:center;gap:8px;">
-        <span style="font-size:11px;color:#aaa;">HEALTH</span>
+      <div id="health-wrapper">
+        <span class="hud-label">HEALTH</span>
         <div id="health-bar-container"><div id="health-bar-fill"></div></div>
       </div>
     </div>
+    
     <div id="interaction-prompt">[E] INTERACT</div>
+    
     <div id="inventory-bar">
       <div class="inv-slot active" id="slot-0"><span class="slot-num">1</span><b class="slot-name">EMPTY</b></div>
       <div class="inv-slot" id="slot-1"><span class="slot-num">2</span><b class="slot-name">EMPTY</b></div>
@@ -204,7 +42,7 @@
     </div>
   </div>
 
-  <!-- MOBILE ON-SCREEN CONTROLS -->
+  <!-- MOBILE CONTROLS (STRICTLY OPT-IN) -->
   <div id="mobile-controls">
     <div class="touch-zone" id="touch-move"><div class="joystick-knob" id="knob-move"></div></div>
     <div class="touch-zone" id="touch-look"><div class="joystick-knob" id="knob-look"></div></div>
@@ -225,24 +63,24 @@
 
   <!-- MAIN MENU -->
   <div class="menu-screen" id="main-menu">
-    <h1 class="title">GRANNY<br><span style="font-size:20px;color:#bbb;">TUNG TUNG SAHUR EDITION</span></h1>
+    <h1 class="title">GRANNY<br><span class="subtitle">TUNG TUNG SAHUR EDITION</span></h1>
     <button class="menu-btn" id="btn-singleplayer">Single Player</button>
     <button class="menu-btn" id="btn-multiplayer">Multiplayer Lobbies</button>
     <button class="menu-btn" id="btn-wardrobe">Wardrobe</button>
     <button class="menu-btn" id="btn-settings">Settings</button>
   </div>
 
-  <!-- SINGLE PLAYER CONFIG -->
+  <!-- SINGLE PLAYER MODAL -->
   <div class="menu-screen" id="sp-modal" style="display:none;">
     <div class="panel">
-      <h2 style="color:var(--blood-bright);margin-bottom:15px;">SINGLE PLAYER CONFIG</h2>
+      <h2>SINGLE PLAYER CONFIG</h2>
       <div class="setting-row">
         <label>Difficulty</label>
         <select id="sp-diff">
           <option value="easy">Easy (Slower Granny)</option>
           <option value="normal" selected>Normal (Standard)</option>
           <option value="hard">Hard (Creaky floors alert AI)</option>
-          <option value="extreme">Extreme (Faster AI + Dark Fog)</option>
+          <option value="extreme">Extreme (Faster AI + Pitch Black)</option>
         </select>
       </div>
       <div class="setting-row">
@@ -253,43 +91,43 @@
         <label>Extra Locks</label>
         <input type="checkbox" id="sp-locks" />
       </div>
-      <div style="display:flex;gap:10px;margin-top:20px;">
+      <div class="btn-row">
         <button class="menu-btn" id="sp-start">START ESCAPE</button>
         <button class="menu-btn" id="sp-back">BACK</button>
       </div>
     </div>
   </div>
 
-  <!-- MULTIPLAYER (TRUE GLOBAL CLUSTER) -->
+  <!-- MULTIPLAYER MODAL -->
   <div class="menu-screen" id="mp-modal" style="display:none;">
     <div class="panel">
-      <h2 style="color:var(--blood-bright);margin-bottom:6px;">GLOBAL MULTIPLAYER</h2>
+      <h2>GLOBAL MULTIPLAYER</h2>
       <div id="net-status-pill">CONNECTING TO GLOBAL MESH...</div>
 
       <div id="mp-lobby-browser">
-        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px;">
+        <div class="browser-header">
           <span>Active Lobbies:</span>
-          <div style="display:flex;gap:6px;">
-            <button class="menu-btn" style="width:auto;padding:5px 10px;font-size:11px;" id="btn-sync-lobbies">SYNC LOBBIES</button>
-            <button class="menu-btn" style="width:auto;padding:5px 10px;font-size:11px;" id="btn-show-create-lobby">+ CREATE</button>
+          <div class="btn-group">
+            <button class="menu-btn small" id="btn-sync-lobbies">SYNC LOBBIES</button>
+            <button class="menu-btn small" id="btn-show-create-lobby">+ CREATE</button>
           </div>
         </div>
 
-        <div id="lobbies-list" style="min-height:110px;max-height:160px;overflow-y:auto;border:1px solid #333;background:#0d0d0d;padding:8px;margin-bottom:12px;font-size:12px;">
+        <div id="lobbies-list">
           <div style="color:#666;">Click SYNC LOBBIES to scan for active hosts worldwide...</div>
         </div>
 
-        <div style="border-top:1px solid #333;padding-top:10px;margin-top:10px;">
-          <label style="font-size:11px;color:#aaa;display:block;margin-bottom:5px;">Join via 6-Digit Room Code:</label>
-          <div style="display:flex;gap:6px;">
-            <input type="text" id="mp-direct-code" placeholder="E.g. SAH-42" style="flex:1;text-transform:uppercase;" maxlength="8" />
-            <button class="menu-btn" style="width:auto;padding:5px 14px;font-size:11px;" id="btn-join-code">JOIN CODE</button>
+        <div class="code-join-box">
+          <label>Join via 6-Digit Room Code:</label>
+          <div class="input-row">
+            <input type="text" id="mp-direct-code" placeholder="E.g. SAH-42" maxlength="8" />
+            <button class="menu-btn small" id="btn-join-code">JOIN CODE</button>
           </div>
         </div>
       </div>
 
       <!-- CREATE LOBBY -->
-      <div id="mp-create-box" style="display:none;border-top:1px solid #444;padding-top:12px;">
+      <div id="mp-create-box" style="display:none;">
         <div class="setting-row">
           <label>Lobby Name</label>
           <input type="text" id="mp-room-name" value="Sahur Manor Escape" maxlength="24" />
@@ -299,29 +137,29 @@
           <input type="range" id="mp-max-players" min="2" max="21" value="8" />
           <span id="mp-max-players-val">8</span>
         </div>
-        <button class="menu-btn" style="width:100%;margin-top:10px;" id="btn-commit-create-lobby">HOST & GENERATE CODE</button>
+        <button class="menu-btn full" id="btn-commit-create-lobby">HOST & GENERATE CODE</button>
       </div>
 
-      <!-- LOBBY WAITING ROOM -->
+      <!-- LOBBY ROOM -->
       <div id="mp-lobby-room" style="display:none;">
-        <h3 id="room-header" style="color:#00ffaa;margin-bottom:6px;">LOBBY: Sahur Manor</h3>
-        <p style="font-size:12px;color:#f0c040;margin-bottom:8px;">Share Room Code: <b id="room-code-display" style="font-size:15px;letter-spacing:2px;color:#fff;">------</b></p>
-        <p style="font-size:11px;color:#aaa;">Connected Survivors (<span id="room-player-count">1</span>/<span id="room-player-max">8</span>):</p>
-        <ul id="room-player-list" style="margin:10px 0;list-style:none;padding-left:5px;font-size:12px;color:#ffcccc;"></ul>
-        <button class="menu-btn" id="btn-start-multiplayer-game" style="width:100%;display:none;background:var(--blood-bright);">START GAME (HOST)</button>
-        <p id="waiting-msg" style="font-size:11px;color:#ff8800;margin-top:8px;">Waiting for at least 1 other survivor to join...</p>
+        <h3 id="room-header">LOBBY: Sahur Manor</h3>
+        <p class="code-banner">Share Room Code: <b id="room-code-display">------</b></p>
+        <p class="player-count">Connected Survivors (<span id="room-player-count">1</span>/<span id="room-player-max">8</span>):</p>
+        <ul id="room-player-list"></ul>
+        <button class="menu-btn full danger" id="btn-start-multiplayer-game" style="display:none;">START GAME (HOST)</button>
+        <p id="waiting-msg">Waiting for at least 1 other survivor to join...</p>
       </div>
 
-      <div style="margin-top:15px;">
-        <button class="menu-btn" style="width:100%;" id="btn-mp-back">BACK TO MENU</button>
+      <div class="btn-row" style="margin-top:15px;">
+        <button class="menu-btn full" id="btn-mp-back">BACK TO MENU</button>
       </div>
     </div>
   </div>
 
-  <!-- WARDROBE -->
+  <!-- WARDROBE MODAL -->
   <div class="menu-screen" id="wardrobe-modal" style="display:none;">
     <div class="panel">
-      <h2 style="color:var(--blood-bright);margin-bottom:12px;">WARDROBE CUSTOMIZATION</h2>
+      <h2>WARDROBE CUSTOMIZATION</h2>
       <div id="wardrobe-canvas"></div>
       <div class="setting-row">
         <label>Shirt Color</label>
@@ -335,1760 +173,131 @@
         <label>Pants Color</label>
         <input type="color" id="wardrobe-pants" value="#22222b" />
       </div>
-      <button class="menu-btn" style="width:100%;margin-top:10px;" id="wardrobe-back">SAVE & BACK</button>
+      <button class="menu-btn full" id="wardrobe-back" style="margin-top:10px;">SAVE & BACK</button>
     </div>
   </div>
 
-  <!-- SETTINGS -->
+  <!-- SETTINGS MODAL -->
   <div class="menu-screen" id="settings-modal" style="display:none;">
     <div class="panel">
       <div class="tab-bar">
         <button class="tab-btn active" id="tab-btn-gfx">Graphics</button>
         <button class="tab-btn" id="tab-btn-ctrl">Controls</button>
+        <button class="tab-btn" id="tab-btn-audio">Audio</button>
         <button class="tab-btn" id="tab-btn-prof">Profile & Stats</button>
       </div>
 
+      <!-- GRAPHICS TAB -->
       <div id="tab-gfx" class="tab-content">
         <div class="setting-row">
-          <label>Hardware Profile Preset</label>
+          <label>Graphics Preset</label>
           <select id="opt-profile">
-            <option value="auto">Auto-Detect GPU</option>
-            <option value="tensor">Google Tensor Engine Optimized</option>
+            <option value="high" selected>Desktop Ultra</option>
+            <option value="tensor">Google Tensor Tuned (Mali G715/G720)</option>
             <option value="apple">Apple A16 - A18 Pro Max Tuned</option>
-            <option value="high">Desktop Ultra</option>
+            <option value="low">Low Power / Battery Saver</option>
           </select>
         </div>
         <div class="setting-row">
+          <label>Field of View (FOV)</label>
+          <input type="range" id="opt-fov" min="60" max="105" value="75" />
+          <span id="opt-fov-val">75°</span>
+        </div>
+        <div class="setting-row">
+          <label>Gamma / Brightness</label>
+          <input type="range" id="opt-gamma" min="0.5" max="1.8" step="0.1" value="1.0" />
+          <span id="opt-gamma-val">1.0</span>
+        </div>
+        <div class="setting-row">
+          <label>Resolution Scale</label>
+          <input type="range" id="opt-res" min="0.5" max="1.5" step="0.1" value="1.0" />
+          <span id="opt-res-val">1.0x</span>
+        </div>
+        <div class="setting-row">
           <label>Atmospheric Fog</label>
-          <input type="checkbox" id="opt-fog" checked />
+          <select id="opt-fog">
+            <option value="light">Light</option>
+            <option value="normal" selected>Normal</option>
+            <option value="heavy">Heavy (Nightmare)</option>
+            <option value="none">None</option>
+          </select>
+        </div>
+        <div class="setting-row">
+          <label>Film Grain & Aberration</label>
+          <input type="checkbox" id="opt-grain" checked />
         </div>
       </div>
 
+      <!-- CONTROLS TAB -->
       <div id="tab-ctrl" class="tab-content" style="display:none;">
         <div class="setting-row">
-          <label>Mobile Controls (Joysticks & Buttons)</label>
+          <label>Mobile Mode (Joysticks & Touch Buttons)</label>
           <input type="checkbox" id="opt-mobile-mode" />
         </div>
         <div class="setting-row">
-          <label>Look Sensitivity</label>
+          <label>Mouse Look Sensitivity</label>
           <input type="range" id="opt-sens" min="0.2" max="3.0" step="0.1" value="1.0" />
           <span id="opt-sens-val">1.0</span>
         </div>
         <div class="setting-row">
-          <label>PC Crosshair Type</label>
+          <label>Invert Y-Axis</label>
+          <input type="checkbox" id="opt-inverty" />
+        </div>
+        <div class="setting-row">
+          <label>Head Bobbing Intensity</label>
+          <input type="range" id="opt-bob" min="0" max="1.5" step="0.1" value="1.0" />
+          <span id="opt-bob-val">1.0</span>
+        </div>
+        <div class="setting-row">
+          <label>Crosshair Reticle</label>
           <select id="opt-crosshair">
-            <option value="reticle-dot">Subtle Dot</option>
+            <option value="reticle-dot" selected>Subtle Dot</option>
             <option value="reticle-cross">Tactical Crosshair</option>
             <option value="reticle-ring">Classic Horror Ring</option>
+            <option value="reticle-none">None (Immersive)</option>
           </select>
         </div>
       </div>
 
+      <!-- AUDIO TAB -->
+      <div id="tab-audio" class="tab-content" style="display:none;">
+        <div class="setting-row">
+          <label>Master Volume</label>
+          <input type="range" id="opt-vol-master" min="0" max="1" step="0.05" value="1.0" />
+        </div>
+        <div class="setting-row">
+          <label>SFX & Clangs</label>
+          <input type="range" id="opt-vol-sfx" min="0" max="1" step="0.05" value="1.0" />
+        </div>
+        <div class="setting-row">
+          <label>"Tung Tung Sahur" Chase Music</label>
+          <input type="range" id="opt-vol-music" min="0" max="1" step="0.05" value="1.0" />
+        </div>
+      </div>
+
+      <!-- PROFILE & STATS TAB -->
       <div id="tab-prof" class="tab-content" style="display:none;">
         <div class="setting-row">
           <label>Survivor Display Name</label>
           <input type="text" id="prof-name" value="Survivor" maxlength="16" />
         </div>
-        <hr style="border:0;border-top:1px solid #333;margin:15px 0;" />
-        <h4 style="color:#aaa;margin-bottom:8px;">SURVIVOR CAREER METRICS</h4>
-        <div style="font-size:12px;color:#888;display:grid;grid-template-columns:1fr 1fr;gap:8px;">
-          <div>Escapes Made: <b id="stat-escapes" style="color:#fff;">0</b></div>
+        <hr class="divider" />
+        <h4 class="stats-header">SURVIVOR METRICS</h4>
+        <div class="stats-grid">
+          <div>Escapes Made: <b id="stat-escapes">0</b></div>
           <div>Deaths to Granny: <b id="stat-deaths" style="color:var(--blood-bright);">0</b></div>
           <div>Granny Stuns: <b id="stat-stuns" style="color:#00ffaa;">0</b></div>
-          <div>Days Survived: <b id="stat-days" style="color:#fff;">0</b></div>
+          <div>Days Survived: <b id="stat-days">0</b></div>
         </div>
       </div>
 
-      <button class="menu-btn" style="width:100%;margin-top:15px;" id="settings-back">SAVE & CLOSE</button>
+      <button class="menu-btn full" id="settings-back" style="margin-top:15px;">SAVE & CLOSE</button>
     </div>
   </div>
 
-  <!-- GAME SCRIPT -->
-  <script>
-  /* =========================================================================
-     1. HARDWARE & DEVICE PROFILE DETECTOR
-     ========================================================================= */
-  const HardwareProfile = {
-    gpu: 'Generic WebGL',
-    isMobileDevice: false,
-    detect() {
-      const gl = document.createElement('canvas').getContext('webgl');
-      if (gl) {
-        const dbg = gl.getExtension('WEBGL_debug_renderer_info');
-        if (dbg) this.gpu = gl.getParameter(dbg.UNMASKED_RENDERER_WEBGL);
-      }
-      const ua = navigator.userAgent.toLowerCase();
-      this.isMobileDevice = /iphone|ipad|ipod|android|mobile/.test(ua) || (navigator.maxTouchPoints > 1);
-    }
-  };
-  HardwareProfile.detect();
-
-  /* =========================================================================
-     2. DUAL-MODE AUDIO ENGINE (LOCAL FILES OR SYNTHETIC BACKUP)
-     ========================================================================= */
-  class DualAudioEngine {
-    constructor() {
-      this.ctx = null;
-      this.chaseTimer = null;
-      this.loadedBuffers = {};
-      this.soundFiles = {
-        chase: 'audio/sahur_chase.mp3',
-        tung: 'audio/tung.mp3',
-        sahur: 'audio/sahur_voice.mp3',
-        jumpscare: 'audio/jumpscare.mp3',
-        creak: 'audio/creak.mp3',
-        door: 'audio/door_open.mp3',
-        crossbow: 'audio/crossbow.mp3',
-        shotgun: 'audio/shotgun.mp3',
-        drop: 'audio/item_drop.mp3'
-      };
-    }
-
-    init() {
-      if (!this.ctx) {
-        const AudioCtx = window.AudioContext || window.webkitAudioContext;
-        this.ctx = new AudioCtx();
-        this.preloadLocalAudio();
-      }
-      if (this.ctx.state === 'suspended') this.ctx.resume();
-    }
-
-    async preloadLocalAudio() {
-      for (const [key, path] of Object.entries(this.soundFiles)) {
-        try {
-          const res = await fetch(path);
-          if (res.ok) {
-            const arr = await res.arrayBuffer();
-            this.loadedBuffers[key] = await this.ctx.decodeAudioData(arr);
-            console.log(`[Audio] Loaded custom file: ${path}`);
-          }
-        } catch(e) {}
-      }
-    }
-
-    playFileOrSynth(key, synthCallback) {
-      this.init();
-      if (this.loadedBuffers[key]) {
-        const src = this.ctx.createBufferSource();
-        src.buffer = this.loadedBuffers[key];
-        src.connect(this.ctx.destination);
-        src.start(0);
-      } else {
-        synthCallback();
-      }
-    }
-
-    playTung() {
-      this.playFileOrSynth('tung', () => {
-        const now = this.ctx.currentTime;
-        const osc = this.ctx.createOscillator();
-        const gain = this.ctx.createGain();
-        const filt = this.ctx.createBiquadFilter();
-
-        osc.type = 'triangle';
-        osc.frequency.setValueAtTime(360, now);
-        osc.frequency.exponentialRampToValueAtTime(110, now + 0.28);
-
-        filt.type = 'bandpass';
-        filt.frequency.setValueAtTime(320, now);
-        filt.Q.setValueAtTime(4.0, now);
-
-        gain.gain.setValueAtTime(0.9, now);
-        gain.gain.exponentialRampToValueAtTime(0.001, now + 0.28);
-
-        osc.connect(filt);
-        filt.connect(gain);
-        gain.connect(this.ctx.destination);
-        osc.start(now);
-        osc.stop(now + 0.28);
-      });
-    }
-
-    playSahurChant() {
-      this.playFileOrSynth('sahur', () => {
-        const now = this.ctx.currentTime;
-        const buf = this.ctx.createBuffer(1, this.ctx.sampleRate * 0.35, this.ctx.sampleRate);
-        const d = buf.getChannelData(0);
-        for (let i = 0; i < d.length; i++) d[i] = (Math.random() * 2 - 1) * Math.exp(-i / (d.length * 0.5));
-        const src = this.ctx.createBufferSource();
-        src.buffer = buf;
-
-        const f1 = this.ctx.createBiquadFilter();
-        f1.type = 'bandpass';
-        f1.frequency.setValueAtTime(800, now);
-        f1.Q.setValueAtTime(4.0, now);
-
-        const gain = this.ctx.createGain();
-        gain.gain.setValueAtTime(0.75, now);
-        gain.gain.exponentialRampToValueAtTime(0.001, now + 0.35);
-
-        src.connect(f1);
-        f1.connect(gain);
-        gain.connect(this.ctx.destination);
-        src.start(now);
-      });
-    }
-
-    triggerTungSahurPattern() {
-      this.playTung();
-      setTimeout(() => this.playTung(), 220);
-      setTimeout(() => this.playTung(), 440);
-      setTimeout(() => this.playTung(), 660);
-      setTimeout(() => this.playSahurChant(), 850);
-    }
-
-    startChase() {
-      if (this.chaseTimer) return;
-      this.triggerTungSahurPattern();
-      this.chaseTimer = setInterval(() => this.triggerTungSahurPattern(), 1400);
-    }
-
-    stopChase() {
-      if (this.chaseTimer) {
-        clearInterval(this.chaseTimer);
-        this.chaseTimer = null;
-      }
-    }
-
-    playDoor() {
-      this.playFileOrSynth('door', () => {
-        this.playCreak();
-      });
-    }
-
-    playCreak() {
-      this.playFileOrSynth('creak', () => {
-        const now = this.ctx.currentTime;
-        const osc = this.ctx.createOscillator();
-        const gain = this.ctx.createGain();
-        osc.type = 'sawtooth';
-        osc.frequency.setValueAtTime(95, now);
-        osc.frequency.linearRampToValueAtTime(145, now + 0.3);
-        gain.gain.setValueAtTime(0.15, now);
-        gain.gain.exponentialRampToValueAtTime(0.001, now + 0.35);
-        osc.connect(gain);
-        gain.connect(this.ctx.destination);
-        osc.start(now);
-        osc.stop(now + 0.35);
-      });
-    }
-
-    playCrossbow() {
-      this.playFileOrSynth('crossbow', () => {
-        const now = this.ctx.currentTime;
-        const osc = this.ctx.createOscillator();
-        const gain = this.ctx.createGain();
-        osc.type = 'triangle';
-        osc.frequency.setValueAtTime(500, now);
-        osc.frequency.exponentialRampToValueAtTime(80, now + 0.12);
-        gain.gain.setValueAtTime(0.7, now);
-        gain.gain.exponentialRampToValueAtTime(0.01, now + 0.15);
-        osc.connect(gain);
-        gain.connect(this.ctx.destination);
-        osc.start(now);
-        osc.stop(now + 0.15);
-      });
-    }
-
-    playShotgun() {
-      this.playFileOrSynth('shotgun', () => {
-        this.playTung();
-        this.playCreak();
-      });
-    }
-
-    playJumpscare() {
-      this.playFileOrSynth('jumpscare', () => {
-        const now = this.ctx.currentTime;
-        for (let i = 0; i < 4; i++) {
-          const osc = this.ctx.createOscillator();
-          const gain = this.ctx.createGain();
-          osc.type = 'sawtooth';
-          osc.frequency.setValueAtTime(160 + i * 110, now);
-          osc.frequency.linearRampToValueAtTime(80, now + 0.9);
-          gain.gain.setValueAtTime(0.3, now);
-          gain.gain.exponentialRampToValueAtTime(0.001, now + 1.0);
-          osc.connect(gain);
-          gain.connect(this.ctx.destination);
-          osc.start(now);
-          osc.stop(now + 1.0);
-        }
-      });
-    }
-  }
-  const audio = new DualAudioEngine();
-
-  /* =========================================================================
-     3. PROCEDURAL PBR TEXTURES & ENGINE ASSETS
-     ========================================================================= */
-  const Assets = {
-    woodMat: null,
-    wallMat: null,
-    concreteMat: null,
-    metalMat: null,
-    skinMat: null,
-    bloodMat: null,
-    blanketMat: null,
-
-    init() {
-      const makeWoodCanvas = () => {
-        const c = document.createElement('canvas'); c.width = 512; c.height = 512;
-        const ctx = c.getContext('2d');
-        ctx.fillStyle = '#2b1b11'; ctx.fillRect(0, 0, 512, 512);
-        ctx.strokeStyle = '#180f09';
-        for (let i = 0; i < 64; i++) {
-          ctx.lineWidth = 1 + Math.random() * 3;
-          ctx.beginPath();
-          const y = Math.random() * 512;
-          ctx.moveTo(0, y);
-          ctx.bezierCurveTo(160, y + (Math.random()-0.5)*30, 340, y + (Math.random()-0.5)*30, 512, y);
-          ctx.stroke();
-        }
-        for (let x = 0; x < 512; x += 128) {
-          ctx.fillStyle = '#100a06'; ctx.fillRect(x, 0, 4, 512);
-        }
-        return new THREE.CanvasTexture(c);
-      };
-
-      const makeWallCanvas = () => {
-        const c = document.createElement('canvas'); c.width = 512; c.height = 512;
-        const ctx = c.getContext('2d');
-        ctx.fillStyle = '#323429'; ctx.fillRect(0, 0, 512, 512);
-        ctx.fillStyle = '#24261d';
-        for (let x = 0; x < 512; x += 48) {
-          for (let y = 0; y < 512; y += 48) {
-            ctx.beginPath(); ctx.arc(x + 24, y + 24, 7, 0, Math.PI*2); ctx.fill();
-          }
-        }
-        // Grime & stains
-        for (let i = 0; i < 900; i++) {
-          ctx.fillStyle = `rgba(15,12,8,${Math.random() * 0.3})`;
-          ctx.fillRect(Math.random()*512, Math.random()*512, 4, 4);
-        }
-        return new THREE.CanvasTexture(c);
-      };
-
-      const woodTex = makeWoodCanvas();
-      const wallTex = makeWallCanvas();
-
-      this.woodMat = new THREE.MeshStandardMaterial({ map: woodTex, roughness: 0.85 });
-      this.wallMat = new THREE.MeshStandardMaterial({ map: wallTex, roughness: 0.95 });
-      this.concreteMat = new THREE.MeshStandardMaterial({ color: 0x2e2e2e, roughness: 0.95 });
-      this.metalMat = new THREE.MeshStandardMaterial({ color: 0x888888, metalness: 0.8, roughness: 0.3 });
-      this.skinMat = new THREE.MeshStandardMaterial({ color: 0xb5a088, roughness: 0.8 });
-      this.bloodMat = new THREE.MeshStandardMaterial({ color: 0x770000 });
-      this.blanketMat = new THREE.MeshStandardMaterial({ color: 0x6e2626, roughness: 0.9 });
-    }
-  };
-  Assets.init();
-
-  /* =========================================================================
-     4. GAME STATE & CAREER METRICS
-     ========================================================================= */
-  const GameState = {
-    day: 1,
-    maxDays: 5,
-    mode: 'sp',
-    difficulty: 'normal',
-    nightmare: false,
-    extraLocks: false,
-    playerStats: { escapes: 0, deaths: 0, stuns: 0, days: 0 },
-
-    load() {
-      const s = localStorage.getItem('granny_v4_stats');
-      if (s) try { Object.assign(this.playerStats, JSON.parse(s)); } catch(e){}
-      this.updateUI();
-    },
-    save() {
-      localStorage.setItem('granny_v4_stats', JSON.stringify(this.playerStats));
-      this.updateUI();
-    },
-    updateUI() {
-      document.getElementById('stat-escapes').innerText = this.playerStats.escapes;
-      document.getElementById('stat-deaths').innerText = this.playerStats.deaths;
-      document.getElementById('stat-stuns').innerText = this.playerStats.stuns;
-      document.getElementById('stat-days').innerText = this.playerStats.days;
-    }
-  };
-  GameState.load();
-
-  /* =========================================================================
-     5. THREE.JS SCENE SETUP
-     ========================================================================= */
-  const container = document.getElementById('canvas-container');
-  const scene = new THREE.Scene();
-  scene.background = new THREE.Color(0x040404);
-  scene.fog = new THREE.FogExp2(0x040404, 0.07);
-
-  const camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 70);
-  const renderer = new THREE.WebGLRenderer({ antialias: !HardwareProfile.isMobileDevice, powerPreference: 'high-performance' });
-  renderer.setSize(window.innerWidth, window.innerHeight);
-  renderer.setPixelRatio(Math.min(window.devicePixelRatio, 1.5));
-  renderer.shadowMap.enabled = true;
-  renderer.shadowMap.type = THREE.PCFSoftShadowMap;
-  container.appendChild(renderer.domElement);
-
-  // Atmospheric House Lighting
-  const ambLight = new THREE.AmbientLight(0x282828);
-  scene.add(ambLight);
-
-  const bedroomLamp = new THREE.PointLight(0xffaa44, 0.9, 14);
-  bedroomLamp.position.set(-8, 9.5, 8);
-  scene.add(bedroomLamp);
-
-  const foyerLamp = new THREE.PointLight(0xffdd99, 0.7, 18);
-  foyerLamp.position.set(0, 4.2, 8);
-  scene.add(foyerLamp);
-
-  const basementLight = new THREE.PointLight(0x44bb77, 0.6, 16);
-  basementLight.position.set(-4, -3.5, -4);
-  scene.add(basementLight);
-
-  /* =========================================================================
-     6. AABB COLLISION WORLD & HOUSE BUILDER (STAIRS, ROOMS, DOORS)
-     ========================================================================= */
-  const CollisionWorld = {
-    boxes: [], // Array of THREE.Box3
-
-    addBox(minX, minY, minZ, maxX, maxY, maxZ) {
-      const box = new THREE.Box3(
-        new THREE.Vector3(Math.min(minX, maxX), Math.min(minY, maxY), Math.min(minZ, maxZ)),
-        new THREE.Vector3(Math.max(minX, maxX), Math.max(minY, maxY), Math.max(minZ, maxZ))
-      );
-      this.boxes.push(box);
-      return box;
-    },
-
-    removeBox(box) {
-      const idx = this.boxes.indexOf(box);
-      if (idx !== -1) this.boxes.splice(idx, 1);
-    }
-  };
-
-  const House = {
-    interactables: [],
-    hidingSpots: [],
-    doors: [],
-    items: [],
-    locks: {
-      planks: 2,
-      padlock: true,
-      keycard: true,
-      master: true,
-      carPlug: false,
-      carGas: false,
-      carKey: false
-    },
-
-    build() {
-      const makeWall = (w, h, d, x, y, z, mat) => {
-        const mesh = new THREE.Mesh(new THREE.BoxGeometry(w, h, d), mat);
-        mesh.position.set(x, y, z);
-        mesh.castShadow = true;
-        mesh.receiveShadow = true;
-        scene.add(mesh);
-        CollisionWorld.addBox(x - w/2, y - h/2, z - d/2, x + w/2, y + h/2, z + d/2);
-        return mesh;
-      };
-
-      // 1. FLOORS & CEILINGS
-      // Basement: Y = -6
-      makeWall(30, 0.4, 30, 0, -6, 0, Assets.concreteMat);
-      // Ground Floor: Y = 0 (With cutouts for stairs)
-      makeWall(20, 0.4, 30, -5, 0, 0, Assets.woodMat);
-      makeWall(10, 0.4, 18, 10, 0, -6, Assets.woodMat);
-      // Upstairs Floor: Y = 5.5 (Cutout for central stairwell)
-      makeWall(30, 0.4, 18, 0, 5.5, -6, Assets.woodMat);
-      makeWall(14, 0.4, 12, -8, 5.5, 9, Assets.woodMat);
-      makeWall(8, 0.4, 12, 11, 5.5, 9, Assets.woodMat);
-      // Attic Floor / Ceiling: Y = 11
-      makeWall(30, 0.4, 30, 0, 11, 0, Assets.woodMat);
-
-      // Perimeter Exterior Walls
-      makeWall(30, 20, 0.6, 0, 3, -15, Assets.wallMat);
-      makeWall(30, 20, 0.6, 0, 3, 15, Assets.wallMat);
-      makeWall(0.6, 20, 30, -15, 3, 0, Assets.wallMat);
-      makeWall(0.6, 20, 30, 15, 3, 0, Assets.wallMat);
-
-      // 2. STAIRCASE 1: GROUND FLOOR (0) TO UPSTAIRS (5.5)
-      const numSteps1 = 14;
-      for (let i = 0; i < numSteps1; i++) {
-        const stepY = 0.2 + i * (5.5 / numSteps1);
-        const stepZ = 14 - i * 0.75;
-        makeWall(3.2, 0.45, 0.8, 4.5, stepY, stepZ, Assets.woodMat);
-      }
-
-      // 3. STAIRCASE 2: GROUND FLOOR (0) DOWN TO BASEMENT (-6)
-      const numSteps2 = 14;
-      for (let i = 0; i < numSteps2; i++) {
-        const stepY = -0.2 - i * (5.8 / numSteps2);
-        const stepZ = -2 - i * 0.75;
-        makeWall(3.0, 0.45, 0.8, -4.5, stepY, stepZ, Assets.concreteMat);
-      }
-
-      // 4. UPSTAIRS BEDROOM (STARTING ROOM)
-      makeWall(14, 5.2, 0.4, -8, 8.2, 3, Assets.wallMat); // Front Wall
-      makeWall(0.4, 5.2, 12, -1, 8.2, 9, Assets.wallMat); // Right Wall
-
-      // STARTING BED (WITH COLLIDERS + HIDE AREA)
-      const bedGroup = new THREE.Group();
-      const mattress = new THREE.Mesh(new THREE.BoxGeometry(3.6, 0.6, 5.4), Assets.blanketMat);
-      mattress.position.y = 1.3;
-      bedGroup.add(mattress);
-      const bedHead = new THREE.Mesh(new THREE.BoxGeometry(3.8, 1.8, 0.3), Assets.woodMat);
-      bedHead.position.set(0, 1.4, 2.7);
-      bedGroup.add(bedHead);
-      bedGroup.position.set(-9, 5.7, 9);
-      scene.add(bedGroup);
-
-      CollisionWorld.addBox(-10.8, 5.7, 6.3, -7.2, 7.6, 11.7);
-      this.hidingSpots.push({ position: new THREE.Vector3(-9, 6.2, 9), type: 'bed' });
-
-      // Interactive Bedroom Door (Hinged Pivot)
-      this.createDoor(-5, 8.2, 3, 2.6, 4.6, 0);
-
-      // Bedside Table + Fragile Noise-Making Vase
-      makeWall(1.6, 1.4, 1.6, -3.5, 6.4, 5, Assets.woodMat);
-      this.spawnItem('Vase', new THREE.Vector3(-3.5, 7.6, 5));
-
-      // 5. UPSTAIRS WARDROBE (HIDING SPOT)
-      const wardrobe = new THREE.Mesh(new THREE.BoxGeometry(2.4, 4.4, 1.6), Assets.woodMat);
-      wardrobe.position.set(-13, 8.0, 5);
-      scene.add(wardrobe);
-      CollisionWorld.addBox(-14.2, 5.7, 4.2, -11.8, 10.5, 5.8);
-      this.hidingSpots.push({ position: new THREE.Vector3(-12.8, 7.2, 5.0), type: 'wardrobe' });
-
-      // 6. HIDDEN PAINTING ROOM (UPSTAIRS)
-      const painting = new THREE.Mesh(new THREE.BoxGeometry(2.2, 2.6, 0.2), Assets.woodMat);
-      painting.position.set(4, 8.2, -5.8);
-      scene.add(painting);
-      this.interactables.push({
-        mesh: painting,
-        prompt: '[E] Slide Picture Frame',
-        action: () => {
-          painting.position.x += 2.2;
-          audio.playDoor();
-          return 'Discovered Secret Passage behind the painting!';
-        }
-      });
-
-      // 7. MAIN FOYER & BARRICADED FRONT EXIT DOOR
-      const frontDoor = new THREE.Mesh(new THREE.BoxGeometry(3.2, 4.4, 0.3), Assets.woodMat);
-      frontDoor.position.set(0, 2.2, 14.7);
-      scene.add(frontDoor);
-      const doorCollider = CollisionWorld.addBox(-1.6, 0, 14.5, 1.6, 4.6, 15.0);
-
-      const plank1 = new THREE.Mesh(new THREE.BoxGeometry(3.6, 0.4, 0.2), Assets.woodMat);
-      plank1.position.set(0, 2.8, 14.4);
-      scene.add(plank1);
-      const plank2 = new THREE.Mesh(new THREE.BoxGeometry(3.6, 0.4, 0.2), Assets.woodMat);
-      plank2.position.set(0, 1.6, 14.4);
-      scene.add(plank2);
-
-      this.interactables.push({
-        mesh: frontDoor,
-        prompt: '[E] Escape Front Door',
-        action: (inv) => {
-          if (this.locks.planks > 0) {
-            if (inv.has('Hammer')) {
-              this.locks.planks--;
-              if (this.locks.planks === 1) scene.remove(plank1);
-              if (this.locks.planks === 0) scene.remove(plank2);
-              audio.playTung();
-              return 'Pried off a barricade plank with the Hammer!';
-            }
-            return 'Barricaded by heavy planks. Needs Hammer.';
-          }
-          if (this.locks.padlock) {
-            if (inv.has('Padlock Key')) {
-              this.locks.padlock = false;
-              audio.playTung();
-              return 'Unlocked Padlock!';
-            }
-            return 'Locked with a heavy brass Padlock. Needs Padlock Key.';
-          }
-          if (this.locks.keycard) {
-            if (inv.has('Keycard')) {
-              this.locks.keycard = false;
-              audio.playTung();
-              return 'Swiped Keycard! Electronic locks unlocked!';
-            }
-            return 'Electronic lock panel active. Needs Keycard.';
-          }
-          if (this.locks.master) {
-            if (inv.has('Master Key')) {
-              this.locks.master = false;
-              CollisionWorld.removeBox(doorCollider);
-              triggerVictory('Escaped through the Manor Front Door!');
-              return 'Turned Master Key! You are free!';
-            }
-            return 'Master deadbolt is locked. Needs Master Key.';
-          }
-        }
-      });
-
-      // 8. BASEMENT GARAGE & ESCAPE VEHICLE
-      const car = new THREE.Group();
-      const carBody = new THREE.Mesh(new THREE.BoxGeometry(4.4, 1.8, 7.8), new THREE.MeshStandardMaterial({ color: 0x334466, roughness: 0.4 }));
-      carBody.position.y = 1.0;
-      car.add(carBody);
-      car.position.set(-6, -5.8, -6);
-      scene.add(car);
-      CollisionWorld.addBox(-8.2, -6, -10.0, -3.8, -3.8, -2.0);
-
-      this.interactables.push({
-        mesh: carBody,
-        prompt: '[E] Inspect Escape Car',
-        action: (inv) => {
-          if (!this.locks.carPlug) {
-            if (inv.has('Spark Plug')) {
-              this.locks.carPlug = true;
-              inv.remove('Spark Plug');
-              audio.playTung();
-              return 'Installed Spark Plug into car engine!';
-            }
-            return 'Engine is missing a Spark Plug.';
-          }
-          if (!this.locks.carGas) {
-            if (inv.has('Gasoline Can')) {
-              this.locks.carGas = true;
-              inv.remove('Gasoline Can');
-              audio.playTung();
-              return 'Filled car tank with Gasoline!';
-            }
-            return 'Car gas tank is empty.';
-          }
-          if (!this.locks.carKey) {
-            if (inv.has('Car Key')) {
-              this.locks.carKey = true;
-              triggerVictory('Started the Car and smashed out through the garage door!');
-              return 'Engine started!';
-            }
-            return 'Needs Car Key to ignite the engine.';
-          }
-        }
-      });
-
-      // 9. SCATTER KEY ITEMS IN REALISTIC LOCATIONS
-      this.spawnItem('Hammer', new THREE.Vector3(8, 0.8, -8));
-      this.spawnItem('Padlock Key', new THREE.Vector3(6, 6.4, -7));
-      this.spawnItem('Keycard', new THREE.Vector3(-10, -5.2, 8));
-      this.spawnItem('Master Key', new THREE.Vector3(8, 11.5, 6)); // In Attic
-      this.spawnItem('Spark Plug', new THREE.Vector3(-6, 6.4, 2));
-      this.spawnItem('Gasoline Can', new THREE.Vector3(10, -5.2, -8));
-      this.spawnItem('Car Key', new THREE.Vector3(-2, 0.8, 10));
-      this.spawnItem('Tranquilizer Crossbow', new THREE.Vector3(8, 6.4, 4));
-      this.spawnItem('Shotgun', new THREE.Vector3(-10, 0.8, -5));
-    },
-
-    createDoor(x, y, z, w, h, angle) {
-      const pivot = new THREE.Group();
-      pivot.position.set(x - w/2, y - h/2, z);
-      const doorMesh = new THREE.Mesh(new THREE.BoxGeometry(w, h, 0.2), Assets.woodMat);
-      doorMesh.position.set(w/2, h/2, 0);
-      pivot.add(doorMesh);
-      scene.add(pivot);
-
-      let collider = CollisionWorld.addBox(x - w/2, y - h/2, z - 0.2, x + w/2, y + h/2, z + 0.2);
-      let isOpen = false;
-
-      this.interactables.push({
-        mesh: doorMesh,
-        prompt: '[E] Open/Close Door',
-        action: () => {
-          isOpen = !isOpen;
-          pivot.rotation.y = isOpen ? -Math.PI * 0.5 : 0;
-          audio.playDoor();
-          if (isOpen) {
-            CollisionWorld.removeBox(collider);
-            collider = null;
-          } else {
-            collider = CollisionWorld.addBox(x - w/2, y - h/2, z - 0.2, x + w/2, y + h/2, z + 0.2);
-          }
-          return isOpen ? 'Opened Door' : 'Closed Door';
-        }
-      });
-    },
-
-    spawnItem(name, pos) {
-      const group = new THREE.Group();
-      let mesh;
-      if (name.includes('Key')) {
-        mesh = new THREE.Mesh(new THREE.TorusGeometry(0.12, 0.04, 8, 12), Assets.metalMat);
-      } else if (name.includes('Hammer')) {
-        mesh = new THREE.Mesh(new THREE.BoxGeometry(0.3, 0.6, 0.15), Assets.metalMat);
-      } else if (name.includes('Crossbow')) {
-        mesh = new THREE.Mesh(new THREE.BoxGeometry(0.7, 0.2, 0.5), Assets.woodMat);
-      } else if (name.includes('Shotgun')) {
-        mesh = new THREE.Mesh(new THREE.BoxGeometry(0.2, 0.25, 1.1), Assets.metalMat);
-      } else if (name.includes('Gasoline')) {
-        mesh = new THREE.Mesh(new THREE.BoxGeometry(0.4, 0.6, 0.3), Assets.bloodMat);
-      } else {
-        mesh = new THREE.Mesh(new THREE.CylinderGeometry(0.15, 0.2, 0.45, 8), Assets.skinMat);
-      }
-      group.add(mesh);
-      group.position.copy(pos);
-      scene.add(group);
-
-      const record = { name, group, inInventory: false };
-      this.interactables.push({
-        mesh,
-        prompt: `[E] Pick up ${name}`,
-        itemRecord: record,
-        action: (inv) => {
-          if (inv.add(record)) {
-            scene.remove(group);
-            record.inInventory = true;
-            return `Picked up ${name}`;
-          }
-          return 'Inventory Full!';
-        }
-      });
-      this.items.push(record);
-      return record;
-    }
-  };
-
-  /* =========================================================================
-     7. FIRST-PERSON VIEWMODEL ENGINE (3D HELD ITEMS IN HAND)
-     ========================================================================= */
-  const Viewmodel = {
-    group: new THREE.Group(),
-    models: {},
-    activeKey: null,
-    loadedDart: null,
-
-    init() {
-      camera.add(this.group);
-      this.group.position.set(0.32, -0.28, -0.55);
-
-      // 1. Crossbow Viewmodel with Real Loaded Dart
-      const bow = new THREE.Group();
-      const stock = new THREE.Mesh(new THREE.BoxGeometry(0.08, 0.1, 0.65), Assets.woodMat);
-      bow.add(stock);
-      const prod = new THREE.Mesh(new THREE.BoxGeometry(0.7, 0.04, 0.05), Assets.metalMat);
-      prod.position.set(0, 0.03, -0.25);
-      bow.add(prod);
-
-      this.loadedDart = new THREE.Mesh(new THREE.CylinderGeometry(0.012, 0.012, 0.4, 6), new THREE.MeshBasicMaterial({ color: 0x00ffcc }));
-      this.loadedDart.rotation.x = Math.PI * 0.5;
-      this.loadedDart.position.set(0, 0.06, -0.15);
-      bow.add(this.loadedDart);
-      this.models['Tranquilizer Crossbow'] = bow;
-
-      // 2. Double-Barrel Shotgun
-      const sg = new THREE.Group();
-      const barrels = new THREE.Mesh(new THREE.CylinderGeometry(0.035, 0.035, 0.7, 8), Assets.metalMat);
-      barrels.rotation.x = Math.PI * 0.5;
-      barrels.position.set(0, 0.05, -0.25);
-      sg.add(barrels);
-      const sgStock = new THREE.Mesh(new THREE.BoxGeometry(0.07, 0.12, 0.4), Assets.woodMat);
-      sgStock.position.set(0, -0.02, 0.1);
-      sg.add(sgStock);
-      this.models['Shotgun'] = sg;
-
-      // 3. Claw Hammer
-      const hm = new THREE.Group();
-      const handle = new THREE.Mesh(new THREE.CylinderGeometry(0.025, 0.025, 0.45, 8), Assets.woodMat);
-      handle.position.set(0, 0, 0);
-      hm.add(handle);
-      const head = new THREE.Mesh(new THREE.BoxGeometry(0.08, 0.12, 0.18), Assets.metalMat);
-      head.position.set(0, 0.22, -0.03);
-      hm.add(head);
-      hm.rotation.x = 0.4;
-      this.models['Hammer'] = hm;
-
-      // 4. Gasoline Can
-      const gas = new THREE.Group();
-      const body = new THREE.Mesh(new THREE.BoxGeometry(0.24, 0.32, 0.18), Assets.bloodMat);
-      gas.add(body);
-      const spout = new THREE.Mesh(new THREE.CylinderGeometry(0.02, 0.02, 0.12, 6), Assets.metalMat);
-      spout.position.set(0.08, 0.2, 0);
-      gas.add(spout);
-      this.models['Gasoline Can'] = gas;
-
-      // 5. Generic Key
-      const key = new THREE.Group();
-      const ring = new THREE.Mesh(new THREE.TorusGeometry(0.06, 0.015, 6, 12), Assets.metalMat);
-      key.add(ring);
-      const stem = new THREE.Mesh(new THREE.CylinderGeometry(0.012, 0.012, 0.18, 6), Assets.metalMat);
-      stem.rotation.x = Math.PI * 0.5;
-      stem.position.set(0, 0, -0.09);
-      key.add(stem);
-      this.models['GenericKey'] = key;
-
-      // Hide all initially
-      Object.values(this.models).forEach(m => { m.visible = false; this.group.add(m); });
-    },
-
-    setHeldItem(itemName) {
-      Object.values(this.models).forEach(m => m.visible = false);
-      this.activeKey = itemName;
-      if (!itemName) return;
-
-      if (this.models[itemName]) {
-        this.models[itemName].visible = true;
-      } else if (itemName.includes('Key')) {
-        this.models['GenericKey'].visible = true;
-      }
-    },
-
-    animateBob(dt, isMoving) {
-      if (isMoving) {
-        const t = performance.now() * 0.008;
-        this.group.position.x = 0.32 + Math.cos(t) * 0.02;
-        this.group.position.y = -0.28 + Math.sin(t * 2) * 0.02;
-      } else {
-        this.group.position.set(0.32, -0.28, -0.55);
-      }
-    }
-  };
-
-  /* =========================================================================
-     8. PLAYER CONTROLLER WITH SWEPT AABB COLLISION & UNDER-BED LOOK
-     ========================================================================= */
-  const Player = {
-    position: new THREE.Vector3(-9, 7.2, 8),
-    velocity: new THREE.Vector3(),
-    rotation: new THREE.Euler(0, 0, 0, 'YXZ'),
-    radius: 0.38,
-    height: 1.75,
-    health: 100,
-    isCrouched: false,
-    isHiding: false,
-    hidingSpot: null,
-    speed: 4.5,
-    crouchSpeed: 2.2,
-    activeSlot: 0,
-    isGrounded: false,
-
-    init() {
-      this.flashlight = new THREE.SpotLight(0xfff4e0, 2.2, 22, Math.PI * 0.24, 0.35, 1.2);
-      scene.add(this.flashlight);
-      scene.add(this.flashlight.target);
-      Viewmodel.init();
-    },
-
-    update(dt) {
-      // UNDER THE BED HIDING: FREE CAMERA ROTATION ALLOWED
-      if (this.isHiding) {
-        if (this.hidingSpot) {
-          camera.position.set(this.hidingSpot.position.x, this.hidingSpot.position.y, this.hidingSpot.position.z);
-        }
-        camera.quaternion.setFromEuler(this.rotation);
-        return;
-      }
-
-      // 1. Calculate Desired Movement
-      const curSpeed = this.isCrouched ? this.crouchSpeed : this.speed;
-      const move = new THREE.Vector3();
-      if (Input.keys['KeyW']) move.z -= 1;
-      if (Input.keys['KeyS']) move.z += 1;
-      if (Input.keys['KeyA']) move.x -= 1;
-      if (Input.keys['KeyD']) move.x += 1;
-
-      if (Input.touchMoveDir.lengthSq() > 0.01) {
-        move.x += Input.touchMoveDir.x;
-        move.z += Input.touchMoveDir.y;
-      }
-
-      const isMoving = move.lengthSq() > 0.01;
-      if (isMoving) {
-        move.normalize();
-        move.applyAxisAngle(new THREE.Vector3(0, 1, 0), this.rotation.y);
-      }
-
-      // 2. Physics & Gravity
-      this.velocity.y -= 22 * dt; // Gravity
-      let dx = move.x * curSpeed * dt;
-      let dz = move.z * curSpeed * dt;
-      let dy = this.velocity.y * dt;
-
-      // 3. Robust Swept AABB Collision Resolution
-      this.resolveMovement(dx, 0, 0); // X Axis
-      this.resolveMovement(0, 0, dz); // Z Axis
-      this.resolveMovement(0, dy, 0); // Y Axis & Stair step-up
-
-      // 4. Update Camera & Flashlight
-      const eyeOffset = this.isCrouched ? 0.9 : 1.6;
-      camera.position.set(this.position.x, this.position.y + eyeOffset, this.position.z);
-      camera.quaternion.setFromEuler(this.rotation);
-
-      this.flashlight.position.copy(camera.position);
-      const fwd = new THREE.Vector3(0, 0, -1).applyEuler(this.rotation);
-      this.flashlight.target.position.copy(camera.position).add(fwd);
-
-      Viewmodel.animateBob(dt, isMoving);
-    },
-
-    resolveMovement(dx, dy, dz) {
-      const targetPos = this.position.clone().add(new THREE.Vector3(dx, dy, dz));
-      const playerBox = new THREE.Box3();
-
-      const updatePlayerBox = (pos) => {
-        playerBox.min.set(pos.x - this.radius, pos.y, pos.z - this.radius);
-        playerBox.max.set(pos.x + this.radius, pos.y + this.height, pos.z + this.radius);
-      };
-
-      updatePlayerBox(targetPos);
-
-      for (const box of CollisionWorld.boxes) {
-        if (playerBox.intersectsBox(box)) {
-          // Check for Stair Step Climbing (Height <= 0.45m)
-          const stepHeight = box.max.y - this.position.y;
-          if (stepHeight > 0 && stepHeight <= 0.48 && dy <= 0) {
-            this.position.y = box.max.y;
-            this.velocity.y = 0;
-            this.isGrounded = true;
-            return;
-          }
-
-          // Solid Wall or Floor Collision
-          if (dy < 0) { // Landing on floor
-            this.position.y = box.max.y;
-            this.velocity.y = 0;
-            this.isGrounded = true;
-            return;
-          } else if (dy > 0) { // Head hitting ceiling
-            this.velocity.y = 0;
-            return;
-          }
-          return; // Block horizontal passage
-        }
-      }
-
-      this.position.add(new THREE.Vector3(dx, dy, dz));
-    },
-
-    fireWeapon() {
-      const cur = Inventory.items[this.activeSlot];
-      if (!cur) return;
-
-      if (cur.name === 'Tranquilizer Crossbow') {
-        audio.playCrossbow();
-        Viewmodel.loadedDart.visible = false;
-        setTimeout(() => { Viewmodel.loadedDart.visible = true; }, 1200);
-
-        if (MonsterAI.mesh && camera.position.distanceTo(MonsterAI.mesh.position) < 18) {
-          MonsterAI.stun(120);
-        }
-        NetworkEngine.sendShot(camera.position, new THREE.Vector3(0,0,-1).applyEuler(this.rotation), 40, 'dart');
-      } else if (cur.name === 'Shotgun') {
-        audio.playShotgun();
-        if (MonsterAI.mesh && camera.position.distanceTo(MonsterAI.mesh.position) < 10) {
-          MonsterAI.stun(120);
-        }
-        NetworkEngine.sendShot(camera.position, new THREE.Vector3(0,0,-1).applyEuler(this.rotation), 100, 'shotgun');
-      }
-    },
-
-    takeDamage(amount) {
-      this.health = Math.max(0, this.health - amount);
-      document.getElementById('health-bar-fill').style.width = `${this.health}%`;
-      if (this.health <= 0) {
-        triggerJumpscare();
-        this.health = 100;
-        document.getElementById('health-bar-fill').style.width = '100%';
-      }
-    }
-  };
-
-  /* =========================================================================
-     9. INVENTORY ENGINE WITH WHEEL SCROLLING
-     ========================================================================= */
-  const Inventory = {
-    items: [null, null, null, null, null],
-
-    add(itemRecord) {
-      for (let i = 0; i < 5; i++) {
-        if (!this.items[i]) {
-          this.items[i] = itemRecord;
-          this.render();
-          this.syncViewmodel();
-          return true;
-        }
-      }
-      return false;
-    },
-
-    remove(name) {
-      for (let i = 0; i < 5; i++) {
-        if (this.items[i] && this.items[i].name === name) {
-          this.items[i] = null;
-          this.render();
-          this.syncViewmodel();
-          return true;
-        }
-      }
-      return false;
-    },
-
-    has(name) {
-      return this.items.some(it => it && it.name === name);
-    },
-
-    dropCurrent() {
-      const cur = this.items[Player.activeSlot];
-      if (!cur) return;
-      this.items[Player.activeSlot] = null;
-      this.render();
-      this.syncViewmodel();
-
-      const dropPos = camera.position.clone().add(new THREE.Vector3(0, 0, -1.2).applyEuler(Player.rotation));
-      cur.group.position.copy(dropPos);
-      scene.add(cur.group);
-      cur.inInventory = false;
-      audio.playTung();
-      MonsterAI.hearNoise(dropPos, 16);
-    },
-
-    selectSlot(idx) {
-      Player.activeSlot = (idx + 5) % 5;
-      for (let i = 0; i < 5; i++) {
-        document.getElementById(`slot-${i}`).classList.toggle('active', i === Player.activeSlot);
-      }
-      this.syncViewmodel();
-    },
-
-    syncViewmodel() {
-      const it = this.items[Player.activeSlot];
-      Viewmodel.setHeldItem(it ? it.name : null);
-    },
-
-    render() {
-      for (let i = 0; i < 5; i++) {
-        const slotEl = document.getElementById(`slot-${i}`).querySelector('.slot-name');
-        slotEl.innerText = this.items[i] ? this.items[i].name : 'EMPTY';
-      }
-    }
-  };
-
-  /* =========================================================================
-     10. MONSTER AI: TUNG TUNG GRANNY
-     ========================================================================= */
-  const MonsterAI = {
-    mesh: null,
-    state: 'PATROL',
-    speed: 3.2,
-    chaseSpeed: 5.4,
-    stunTimer: 0,
-    investigateTarget: new THREE.Vector3(),
-    patrolIndex: 0,
-    patrolPoints: [
-      new THREE.Vector3(-8, 5.8, 5),
-      new THREE.Vector3(2, 5.8, 5),
-      new THREE.Vector3(0, 0.2, 4),
-      new THREE.Vector3(8, 0.2, -4),
-      new THREE.Vector3(-4, -5.8, -4),
-      new THREE.Vector3(0, 11.2, 0)
-    ],
-
-    init() {
-      const g = new THREE.Group();
-      const torso = new THREE.Mesh(new THREE.CylinderGeometry(0.35, 0.7, 1.8, 8), new THREE.MeshStandardMaterial({ color: 0x999990, roughness: 0.9 }));
-      torso.position.y = 1.3;
-      torso.rotation.x = 0.15;
-      g.add(torso);
-
-      const head = new THREE.Mesh(new THREE.SphereGeometry(0.35, 8, 8), Assets.skinMat);
-      head.position.set(0, 2.3, 0.15);
-      g.add(head);
-
-      const eye = new THREE.Mesh(new THREE.SphereGeometry(0.06, 6, 6), Assets.bloodMat);
-      eye.position.set(-0.12, 2.35, 0.45);
-      const eye2 = eye.clone(); eye2.position.x = 0.12;
-      g.add(eye); g.add(eye2);
-
-      const bat = new THREE.Mesh(new THREE.CylinderGeometry(0.04, 0.07, 1.4, 6), Assets.woodMat);
-      bat.position.set(0.6, 1.2, 0.4);
-      bat.rotation.set(0.4, 0, -0.5);
-      g.add(bat);
-
-      g.position.set(0, 0.2, 0);
-      scene.add(g);
-      this.mesh = g;
-    },
-
-    hearNoise(pos, radius = 16) {
-      if (this.state === 'STUNNED') return;
-      if (this.mesh.position.distanceTo(pos) <= radius) {
-        this.investigateTarget.copy(pos);
-        this.state = 'INVESTIGATE';
-        audio.triggerTungSahurPattern();
-      }
-    },
-
-    stun(duration = 120) {
-      this.state = 'STUNNED';
-      this.stunTimer = duration;
-      audio.stopChase();
-      audio.playTung();
-      GameState.playerStats.stuns++;
-    },
-
-    update(dt) {
-      if (!this.mesh) return;
-
-      if (this.state === 'STUNNED') {
-        this.stunTimer -= dt;
-        this.mesh.rotation.z = 1.3;
-        if (this.stunTimer <= 0) {
-          this.state = 'PATROL';
-          this.mesh.rotation.z = 0;
-        }
-        return;
-      }
-
-      const dist = this.mesh.position.distanceTo(Player.position);
-      if (!Player.isHiding && dist < 16) {
-        const toPlayer = new THREE.Vector3().subVectors(Player.position, this.mesh.position).normalize();
-        const fwd = new THREE.Vector3(0, 0, 1).applyEuler(this.mesh.rotation);
-        if (fwd.angleTo(toPlayer) < Math.PI * 0.48) {
-          if (this.state !== 'CHASE') {
-            this.state = 'CHASE';
-            audio.startChase();
-          }
-        }
-      }
-
-      let target = null;
-      let spd = this.speed;
-
-      if (this.state === 'CHASE') {
-        spd = this.chaseSpeed;
-        target = Player.position;
-        if (Player.isHiding && dist > 3.0) {
-          this.state = 'INVESTIGATE';
-          this.investigateTarget.copy(Player.position);
-          audio.stopChase();
-        }
-      } else if (this.state === 'INVESTIGATE') {
-        target = this.investigateTarget;
-        if (this.mesh.position.distanceTo(this.investigateTarget) < 1.5) this.state = 'PATROL';
-      } else {
-        target = this.patrolPoints[this.patrolIndex];
-        if (this.mesh.position.distanceTo(target) < 1.8) {
-          this.patrolIndex = (this.patrolIndex + 1) % this.patrolPoints.length;
-        }
-      }
-
-      if (target) {
-        const dir = new THREE.Vector3().subVectors(target, this.mesh.position);
-        dir.y = 0;
-        if (dir.length() > 0.1) {
-          dir.normalize();
-          this.mesh.position.x += dir.x * spd * dt;
-          this.mesh.position.z += dir.z * spd * dt;
-          this.mesh.rotation.y = Math.atan2(dir.x, dir.z);
-        }
-      }
-
-      if (dist < 1.6 && !Player.isHiding && this.state !== 'STUNNED') {
-        triggerJumpscare();
-      }
-    }
-  };
-
-  /* =========================================================================
-     11. INPUT ENGINE (POINTER LOCK & WHEEL SELECTION)
-     ========================================================================= */
-  const Input = {
-    keys: {},
-    mouseSens: 0.0022,
-    touchMoveDir: new THREE.Vector2(),
-
-    init() {
-      window.addEventListener('keydown', (e) => {
-        this.keys[e.code] = true;
-        if (e.code === 'KeyE') doInteract();
-        if (e.code === 'KeyG') Inventory.dropCurrent();
-        if (e.code === 'KeyC') toggleCrouch();
-        if (e.code >= 'Digit1' && e.code <= 'Digit5') {
-          Inventory.selectSlot(parseInt(e.code.replace('Digit', '')) - 1);
-        }
-      });
-      window.addEventListener('keyup', (e) => { this.keys[e.code] = false; });
-
-      window.addEventListener('wheel', (e) => {
-        if (e.deltaY > 0) Inventory.selectSlot(Player.activeSlot + 1);
-        else if (e.deltaY < 0) Inventory.selectSlot(Player.activeSlot - 1);
-      });
-
-      window.addEventListener('mousedown', (e) => {
-        if (document.pointerLockElement === container && e.button === 0) {
-          Player.fireWeapon();
-        }
-      });
-
-      window.addEventListener('mousemove', (e) => {
-        if (document.pointerLockElement === container) {
-          Player.rotation.y -= e.movementX * this.mouseSens;
-          Player.rotation.x -= e.movementY * this.mouseSens;
-          Player.rotation.x = Math.max(-Math.PI * 0.45, Math.min(Math.PI * 0.45, Player.rotation.x));
-        }
-      });
-
-      // Pointer Lock Handlers
-      document.getElementById('click-to-focus').onclick = () => {
-        container.requestPointerLock();
-      };
-      document.addEventListener('pointerlockchange', () => {
-        const isLocked = document.pointerLockElement === container;
-        const inGame = document.getElementById('hud').style.display === 'block';
-        document.getElementById('click-to-focus').style.display = (inGame && !isLocked && !document.getElementById('opt-mobile-mode').checked) ? 'flex' : 'none';
-      });
-
-      // Slot Click Selection
-      for (let i = 0; i < 5; i++) {
-        document.getElementById(`slot-${i}`).onclick = () => Inventory.selectSlot(i);
-      }
-
-      this.setupTouchControls();
-    },
-
-    setupTouchControls() {
-      const bind = (zoneId, knobId, cb) => {
-        const zone = document.getElementById(zoneId);
-        const knob = document.getElementById(knobId);
-        let touchId = null, center = { x: 0, y: 0 };
-
-        zone.addEventListener('touchstart', (e) => {
-          const t = e.changedTouches[0];
-          touchId = t.identifier;
-          const r = zone.getBoundingClientRect();
-          center = { x: r.left + r.width/2, y: r.top + r.height/2 };
-        });
-
-        zone.addEventListener('touchmove', (e) => {
-          for (let i = 0; i < e.changedTouches.length; i++) {
-            const t = e.changedTouches[i];
-            if (t.identifier === touchId) {
-              const dx = t.clientX - center.x;
-              const dy = t.clientY - center.y;
-              const dist = Math.min(45, Math.hypot(dx, dy));
-              const angle = Math.atan2(dy, dx);
-              const kx = Math.cos(angle) * dist;
-              const ky = Math.sin(angle) * dist;
-              knob.style.transform = `translate(calc(-50% + ${kx}px), calc(-50% + ${ky}px))`;
-              cb(kx / 45, ky / 45);
-            }
-          }
-        });
-
-        const end = () => {
-          touchId = null;
-          knob.style.transform = 'translate(-50%, -50%)';
-          cb(0, 0);
-        };
-        zone.addEventListener('touchend', end);
-        zone.addEventListener('touchcancel', end);
-      };
-
-      bind('touch-move', 'knob-move', (x, y) => { this.touchMoveDir.set(x, y); });
-      bind('touch-look', 'knob-look', (x, y) => {
-        Player.rotation.y -= x * 0.04;
-        Player.rotation.x -= y * 0.04;
-        Player.rotation.x = Math.max(-Math.PI * 0.42, Math.min(Math.PI * 0.42, Player.rotation.x));
-      });
-
-      document.getElementById('m-btn-use').onclick = doInteract;
-      document.getElementById('m-btn-drop').onclick = () => Inventory.dropCurrent();
-      document.getElementById('m-btn-crouch').onclick = toggleCrouch;
-      document.getElementById('m-btn-fire').onclick = () => Player.fireWeapon();
-    }
-  };
-  Input.init();
-
-  function toggleCrouch() {
-    if (Player.isHiding) {
-      Player.isHiding = false;
-      document.getElementById('stealth-indicator').innerText = 'STEALTH: STANDING';
-      document.getElementById('stealth-indicator').classList.remove('hidden');
-      return;
-    }
-    Player.isCrouched = !Player.isCrouched;
-    const ind = document.getElementById('stealth-indicator');
-    ind.innerText = Player.isCrouched ? 'STEALTH: CROUCHED' : 'STEALTH: STANDING';
-  }
-
-  function doInteract() {
-    audio.init();
-    if (Player.isHiding) {
-      Player.isHiding = false;
-      document.getElementById('stealth-indicator').innerText = 'STEALTH: STANDING';
-      document.getElementById('stealth-indicator').classList.remove('hidden');
-      return;
-    }
-
-    const ray = new THREE.Raycaster();
-    ray.setFromCamera(new THREE.Vector2(0, 0), camera);
-    const meshes = House.interactables.map(o => o.mesh);
-    const hits = ray.intersectObjects(meshes, true);
-
-    if (hits.length > 0 && hits[0].distance < 3.2) {
-      const hitObj = hits[0].object;
-      const target = House.interactables.find(o => o.mesh === hitObj || o.mesh === hitObj.parent);
-      if (target) {
-        const msg = target.action(Inventory);
-        showPrompt(msg || 'Interacted');
-      }
-      return;
-    }
-
-    for (const spot of House.hidingSpots) {
-      if (Player.position.distanceTo(spot.position) < 2.5) {
-        Player.isHiding = true;
-        Player.hidingSpot = spot;
-        document.getElementById('stealth-indicator').innerText = `STEALTH: UNDER ${spot.type.toUpperCase()}`;
-        document.getElementById('stealth-indicator').classList.add('hidden');
-        showPrompt(`Hiding under ${spot.type}. Look around freely! Press [C] or [E] to emerge.`);
-        return;
-      }
-    }
-  }
-
-  function showPrompt(text) {
-    const p = document.getElementById('interaction-prompt');
-    p.innerText = text;
-    p.style.display = 'block';
-    clearTimeout(p._t);
-    p._t = setTimeout(() => { p.style.display = 'none'; }, 2200);
-  }
-
-  /* =========================================================================
-     12. DAY TRANSITIONS & JUMPSCARE
-     ========================================================================= */
-  function showDaySplash(dayNum) {
-    const splash = document.getElementById('day-splash');
-    document.getElementById('day-title').innerText = `DAY ${dayNum}`;
-    document.getElementById('day-subtitle').innerText =
-      dayNum === 1 ? 'Find a way out before she catches you.' :
-      dayNum === 5 ? 'FINAL DAY. She will not spare you.' :
-      'You woke up with a pounding headache.';
-
-    splash.style.display = 'flex';
-    requestAnimationFrame(() => { splash.style.opacity = '1'; });
-
-    setTimeout(() => {
-      splash.style.opacity = '0';
-      setTimeout(() => { splash.style.display = 'none'; }, 1200);
-    }, 2000);
-  }
-
-  function triggerJumpscare() {
-    audio.stopChase();
-    audio.playJumpscare();
-    const overlay = document.getElementById('jumpscare-overlay');
-    overlay.style.display = 'block';
-
-    camera.lookAt(MonsterAI.mesh.position.clone().add(new THREE.Vector3(0, 1.8, 0)));
-
-    setTimeout(() => {
-      overlay.style.display = 'none';
-      GameState.day++;
-      GameState.playerStats.deaths++;
-      GameState.playerStats.days++;
-      GameState.save();
-
-      if (GameState.day > GameState.maxDays) {
-        alert('THE 5 DAYS ARE OVER. Granny caught you for good.');
-        window.location.reload();
-      } else {
-        respawnPlayer();
-      }
-    }, 1400);
-  }
-
-  function respawnPlayer() {
-    Player.position.set(-9, 6.2, 8);
-    Player.isHiding = false;
-    Player.health = 100;
-    document.getElementById('health-bar-fill').style.width = '100%';
-
-    MonsterAI.mesh.position.set(0, 0.2, 0);
-    MonsterAI.state = 'PATROL';
-    showDaySplash(GameState.day);
-  }
-
-  function triggerVictory(method) {
-    GameState.playerStats.escapes++;
-    GameState.save();
-    alert(`FREEDOM! ${method}`);
-    window.location.reload();
-  }
-
-  /* =========================================================================
-     13. TRUE CROSS-DEVICE MULTIPLAYER (WSS GLOBAL PEER MESH)
-     ========================================================================= */
-  const NetworkEngine = {
-    client: null,
-    isHost: false,
-    myId: 'survivor_' + Math.random().toString(36).substring(2, 9),
-    roomCode: '',
-    roomName: '',
-    maxPlayers: 8,
-    peers: {},
-
-    init() {
-      const pill = document.getElementById('net-status-pill');
-      try {
-        this.client = new Paho.MQTT.Client('broker.hivemq.com', 8884, this.myId);
-        this.client.onConnectionLost = () => {
-          pill.innerText = 'STATUS: RECONNECTING TO CLUSTER...';
-          pill.style.color = '#ffaa00';
-          setTimeout(() => this.init(), 3000);
-        };
-        this.client.onMessageArrived = (msg) => {
-          this.handlePacket(msg.destinationName, JSON.parse(msg.payloadString));
-        };
-        this.client.connect({
-          useSSL: true,
-          timeout: 6,
-          onSuccess: () => {
-            pill.innerText = '● CONNECTED TO GLOBAL MULTIPLAYER (Live Across Devices)';
-            pill.style.color = '#00ffaa';
-            this.client.subscribe('granny_v4_lobbies/#');
-          }
-        });
-      } catch(e){}
-    },
-
-    broadcast(topic, data) {
-      if (this.client && this.client.isConnected()) {
-        const msg = new Paho.MQTT.Message(JSON.stringify(data));
-        msg.destinationName = topic;
-        this.client.send(msg);
-      }
-    },
-
-    handlePacket(topic, data) {
-      if (data.sender === this.myId) return;
-
-      if (topic === 'granny_v4_lobbies/announce') {
-        renderLobbyCard(data);
-      } else if (topic === 'granny_v4_lobbies/query' && this.isHost) {
-        this.announce();
-      } else if (topic === `granny_v4_room/${this.roomCode}`) {
-        if (data.type === 'JOIN') {
-          this.peers[data.sender] = { name: data.name, wardrobe: data.wardrobe, pos: new THREE.Vector3() };
-          updateRoomUI();
-          if (this.isHost) this.announce();
-        } else if (data.type === 'START') {
-          startGame();
-        } else if (data.type === 'SYNC') {
-          this.updateRemoteSurvivor(data.sender, data);
-        } else if (data.type === 'SHOT') {
-          const hitPos = new THREE.Vector3(data.x, data.y, data.z);
-          if (Player.position.distanceTo(hitPos) < 2.2) {
-            Player.takeDamage(data.dmg);
-            showPrompt(`Hit by ${data.weapon}! -${data.dmg} HP`);
-          }
-        }
-      }
-    },
-
-    announce() {
-      this.broadcast('granny_v4_lobbies/announce', {
-        code: this.roomCode,
-        name: this.roomName,
-        count: Object.keys(this.peers).length + 1,
-        max: this.maxPlayers
-      });
-    },
-
-    updateRemoteSurvivor(id, data) {
-      if (!this.peers[id]) {
-        // Spawn Real 3D Humanoid Survivor Mesh
-        const g = new THREE.Group();
-        const bodyMat = new THREE.MeshStandardMaterial({ color: data.wardrobe ? data.wardrobe.shirt : 0x335577 });
-        const body = new THREE.Mesh(new THREE.CylinderGeometry(0.3, 0.3, 1.1, 8), bodyMat);
-        body.position.y = 0.9;
-        g.add(body);
-
-        const headMat = new THREE.MeshStandardMaterial({ color: data.wardrobe ? data.wardrobe.skin : 0xd8b28a });
-        const head = new THREE.Mesh(new THREE.SphereGeometry(0.24, 8, 8), headMat);
-        head.position.y = 1.65;
-        g.add(head);
-
-        scene.add(g);
-        this.peers[id] = { mesh: g, name: data.name };
-      }
-
-      const p = this.peers[id];
-      if (p.mesh) {
-        p.mesh.position.set(data.x, data.y, data.z);
-        p.mesh.rotation.y = data.rotY;
-
-        // Player Collision against remote survivors
-        if (Player.position.distanceTo(p.mesh.position) < 0.8) {
-          const push = new THREE.Vector3().subVectors(Player.position, p.mesh.position).normalize().multiplyScalar(0.08);
-          Player.position.add(push);
-        }
-      }
-    },
-
-    sendShot(origin, dir, dmg, weapon) {
-      if (GameState.mode === 'mp') {
-        const hitTarget = origin.clone().add(dir.multiplyScalar(8));
-        this.broadcast(`granny_v4_room/${this.roomCode}`, {
-          type: 'SHOT',
-          sender: this.myId,
-          x: hitTarget.x, y: hitTarget.y, z: hitTarget.z,
-          dmg, weapon
-        });
-      }
-    },
-
-    tickSync() {
-      if (GameState.mode === 'mp' && this.roomCode) {
-        this.broadcast(`granny_v4_room/${this.roomCode}`, {
-          type: 'SYNC',
-          sender: this.myId,
-          name: document.getElementById('prof-name').value,
-          x: Player.position.x,
-          y: Player.position.y,
-          z: Player.position.z,
-          rotY: Player.rotation.y,
-          wardrobe: {
-            shirt: document.getElementById('wardrobe-shirt').value,
-            skin: document.getElementById('wardrobe-skin').value
-          }
-        });
-      }
-    }
-  };
-  NetworkEngine.init();
-
-  /* =========================================================================
-     14. WARDROBE PREVIEW CANVAS
-     ========================================================================= */
-  const Wardrobe = {
-    renderer: null,
-    scene: null,
-    camera: null,
-    avatar: null,
-
-    init() {
-      const box = document.getElementById('wardrobe-canvas');
-      this.scene = new THREE.Scene();
-      this.camera = new THREE.PerspectiveCamera(50, box.clientWidth / box.clientHeight, 0.1, 10);
-      this.camera.position.set(0, 1.2, 2.6);
-
-      this.renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
-      this.renderer.setSize(box.clientWidth, box.clientHeight);
-      box.appendChild(this.renderer.domElement);
-
-      const light = new THREE.DirectionalLight(0xffffff, 1.5);
-      light.position.set(1, 2, 2);
-      this.scene.add(light);
-      this.scene.add(new THREE.AmbientLight(0x404040));
-
-      this.avatar = new THREE.Group();
-      this.body = new THREE.Mesh(new THREE.CylinderGeometry(0.3, 0.3, 1.1, 8), new THREE.MeshStandardMaterial({ color: 0x335577 }));
-      this.body.position.y = 0.9;
-      this.avatar.add(this.body);
-
-      this.head = new THREE.Mesh(new THREE.SphereGeometry(0.24, 8, 8), new THREE.MeshStandardMaterial({ color: 0xd8b28a }));
-      this.head.position.y = 1.65;
-      this.avatar.add(this.head);
-
-      this.scene.add(this.avatar);
-      this.animate();
-
-      document.getElementById('wardrobe-shirt').oninput = (e) => { this.body.material.color.set(e.target.value); };
-      document.getElementById('wardrobe-skin').oninput = (e) => { this.head.material.color.set(e.target.value); };
-    },
-
-    animate() {
-      requestAnimationFrame(() => this.animate());
-      if (this.avatar) this.avatar.rotation.y += 0.015;
-      if (this.renderer) this.renderer.render(this.scene, this.camera);
-    }
-  };
-
-  /* =========================================================================
-     15. UI FLOW & MULTIPLAYER LOBBY HANDLERS
-     ========================================================================= */
-  const showScreen = (id) => {
-    ['main-menu', 'sp-modal', 'mp-modal', 'wardrobe-modal', 'settings-modal'].forEach(s => {
-      document.getElementById(s).style.display = (s === id) ? 'flex' : 'none';
-    });
-  };
-
-  document.getElementById('btn-singleplayer').onclick = () => showScreen('sp-modal');
-  document.getElementById('btn-multiplayer').onclick = () => showScreen('mp-modal');
-  document.getElementById('btn-wardrobe').onclick = () => {
-    showScreen('wardrobe-modal');
-    if (!Wardrobe.renderer) Wardrobe.init();
-  };
-  document.getElementById('btn-settings').onclick = () => showScreen('settings-modal');
-
-  document.getElementById('sp-back').onclick = () => showScreen('main-menu');
-  document.getElementById('btn-mp-back').onclick = () => showScreen('main-menu');
-  document.getElementById('wardrobe-back').onclick = () => showScreen('main-menu');
-  document.getElementById('settings-back').onclick = () => showScreen('main-menu');
-
-  // Singleplayer Start
-  document.getElementById('sp-start').onclick = () => {
-    GameState.mode = 'sp';
-    GameState.difficulty = document.getElementById('sp-diff').value;
-    GameState.nightmare = document.getElementById('sp-nightmare').checked;
-    GameState.extraLocks = document.getElementById('sp-locks').checked;
-    startGame();
-  };
-
-  // Settings Tabs
-  ['gfx', 'ctrl', 'prof'].forEach(t => {
-    document.getElementById(`tab-btn-${t}`).onclick = () => {
-      ['gfx', 'ctrl', 'prof'].forEach(tab => {
-        document.getElementById(`tab-btn-${tab}`).classList.toggle('active', tab === t);
-        document.getElementById(`tab-${tab}`).style.display = (tab === t) ? 'block' : 'none';
-      });
-    };
-  });
-
-  document.getElementById('opt-crosshair').onchange = (e) => {
-    document.getElementById('crosshair').className = e.target.value;
-  };
-  document.getElementById('opt-mobile-mode').onchange = (e) => {
-    document.getElementById('mobile-controls').style.display = e.target.checked ? 'block' : 'none';
-  };
-
-  // Multiplayer Actions
-  document.getElementById('btn-show-create-lobby').onclick = () => {
-    document.getElementById('mp-create-box').style.display = 'block';
-  };
-  document.getElementById('mp-max-players').oninput = (e) => {
-    document.getElementById('mp-max-players-val').innerText = e.target.value;
-  };
-
-  document.getElementById('btn-commit-create-lobby').onclick = () => {
-    NetworkEngine.isHost = true;
-    NetworkEngine.roomCode = 'SAH-' + Math.floor(10 + Math.random() * 89);
-    NetworkEngine.roomName = document.getElementById('mp-room-name').value;
-    NetworkEngine.maxPlayers = parseInt(document.getElementById('mp-max-players').value);
-
-    joinRoomUI(NetworkEngine.roomCode, NetworkEngine.roomName);
-    NetworkEngine.client.subscribe(`granny_v4_room/${NetworkEngine.roomCode}`);
-    NetworkEngine.announce();
-  };
-
-  document.getElementById('btn-sync-lobbies').onclick = () => {
-    document.getElementById('lobbies-list').innerHTML = '<div style="color:#aaa;">Scanning for active lobbies...</div>';
-    NetworkEngine.broadcast('granny_v4_lobbies/query', { sender: NetworkEngine.myId });
-  };
-
-  document.getElementById('btn-join-code').onclick = () => {
-    const code = document.getElementById('mp-direct-code').value.trim().toUpperCase();
-    if (code.length >= 4) {
-      connectToLobby(code, 'Direct Manor');
-    }
-  };
-
-  function renderLobbyCard(data) {
-    const list = document.getElementById('lobbies-list');
-    if (list.querySelector(`[data-code="${data.code}"]`)) return;
-    if (list.innerText.includes('Click SYNC') || list.innerText.includes('Scanning')) list.innerHTML = '';
-
-    const div = document.createElement('div');
-    div.setAttribute('data-code', data.code);
-    div.style.cssText = 'padding:6px;border-bottom:1px solid #333;display:flex;justify-content:space-between;align-items:center;';
-    div.innerHTML = `
-      <span><b>${data.name}</b> [${data.code}] (${data.count}/${data.max})</span>
-      <button class="menu-btn" style="width:auto;padding:4px 10px;font-size:11px;">JOIN</button>
-    `;
-    div.querySelector('button').onclick = () => connectToLobby(data.code, data.name);
-    list.appendChild(div);
-  }
-
-  function connectToLobby(code, name) {
-    NetworkEngine.isHost = false;
-    NetworkEngine.roomCode = code;
-    NetworkEngine.roomName = name;
-    joinRoomUI(code, name);
-
-    NetworkEngine.client.subscribe(`granny_v4_room/${code}`);
-    NetworkEngine.broadcast(`granny_v4_room/${code}`, {
-      type: 'JOIN',
-      sender: NetworkEngine.myId,
-      name: document.getElementById('prof-name').value,
-      wardrobe: { shirt: document.getElementById('wardrobe-shirt').value }
-    });
-  }
-
-  function joinRoomUI(code, name) {
-    GameState.mode = 'mp';
-    document.getElementById('mp-lobby-browser').style.display = 'none';
-    document.getElementById('mp-create-box').style.display = 'none';
-    document.getElementById('mp-lobby-room').style.display = 'block';
-    document.getElementById('room-header').innerText = `LOBBY: ${name}`;
-    document.getElementById('room-code-display').innerText = code;
-    updateRoomUI();
-  }
-
-  function updateRoomUI() {
-    const count = Object.keys(NetworkEngine.peers).length + 1;
-    document.getElementById('room-player-count').innerText = count;
-    const list = document.getElementById('room-player-list');
-    list.innerHTML = `<li>${document.getElementById('prof-name').value} (You)</li>`;
-    Object.values(NetworkEngine.peers).forEach(p => {
-      list.innerHTML += `<li>${p.name || 'Survivor'}</li>`;
-    });
-
-    if (NetworkEngine.isHost && count >= 2) {
-      document.getElementById('btn-start-multiplayer-game').style.display = 'block';
-      document.getElementById('waiting-msg').style.display = 'none';
-    }
-  }
-
-  document.getElementById('btn-start-multiplayer-game').onclick = () => {
-    NetworkEngine.broadcast(`granny_v4_room/${NetworkEngine.roomCode}`, { type: 'START', sender: NetworkEngine.myId });
-    startGame();
-  };
-
-  function startGame() {
-    audio.init();
-    audio.playTung();
-    showScreen('');
-    document.getElementById('hud').style.display = 'block';
-
-    if (document.getElementById('opt-mobile-mode').checked) {
-      document.getElementById('mobile-controls').style.display = 'block';
-    } else {
-      container.requestPointerLock();
-    }
-    respawnPlayer();
-  }
-
-  /* =========================================================================
-     16. RUNTIME INITIALIZATION & GAME LOOP
-     ========================================================================= */
-  House.build();
-  MonsterAI.init();
-  Player.init();
-
-  let lastTime = performance.now();
-  setInterval(() => { NetworkEngine.tickSync(); }, 50); // 20Hz Sync
-
-  function gameLoop() {
-    requestAnimationFrame(gameLoop);
-    const now = performance.now();
-    const dt = Math.min((now - lastTime) / 1000, 0.08);
-    lastTime = now;
-
-    Player.update(dt);
-    MonsterAI.update(dt);
-
-    renderer.render(scene, camera);
-  }
-
-  window.addEventListener('resize', () => {
-    camera.aspect = window.innerWidth / window.innerHeight;
-    camera.updateProjectionMatrix();
-    renderer.setSize(window.innerWidth, window.innerHeight);
-  });
-
-  gameLoop();
-  </script>
+  <!-- LOAD SCRIPT MODULES -->
+  <script src="audio.js"></script>
+  <script src="map.js"></script>
+  <script src="game.js"></script>
 </body>
 </html>
