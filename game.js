@@ -1058,3 +1058,184 @@ document.getElementById('btn-join-code').onclick = () => {
       type: 'JOIN',
       sender: NetworkEngine.myId,
       name: document.getElementById('prof-name').value,
+       wardrobe: {
+            shirt: document.getElementById('wardrobe-shirt').value,
+            skin: document.getElementById('wardrobe-skin').value
+          }
+        });
+        updateRoomUI();
+      }
+    };
+
+    function renderLobbyCard(data) {
+      const list = document.getElementById('lobbies-list');
+      if (list.querySelector(`[data-code="${data.code}"]`)) return;
+      if (list.innerText.includes('Scanning') || list.innerText.includes('Click SYNC')) {
+        list.innerHTML = '';
+      }
+
+      const div = document.createElement('div');
+      div.setAttribute('data-code', data.code);
+      div.style.cssText = 'padding:7px; border-bottom:1px solid #333; display:flex; justify-content:space-between; align-items:center;';
+      div.innerHTML = `
+        <span><b>${data.name}</b> [${data.code}] (${data.count}/${data.max})</span>
+        <button class="menu-btn small">JOIN</button>
+      `;
+
+      div.querySelector('button').onclick = () => {
+        NetworkEngine.roomCode = data.code;
+        NetworkEngine.roomName = data.name;
+        document.getElementById('mp-lobby-browser').style.display = 'none';
+        document.getElementById('mp-lobby-room').style.display = 'block';
+        document.getElementById('room-header').innerText = `LOBBY: ${data.name}`;
+        document.getElementById('room-code-display').innerText = data.code;
+
+        NetworkEngine.client.subscribe(`granny_v4_room/${data.code}`);
+        NetworkEngine.broadcast(`granny_v4_room/${data.code}`, {
+          type: 'JOIN',
+          sender: NetworkEngine.myId,
+          name: document.getElementById('prof-name').value,
+          wardrobe: {
+            shirt: document.getElementById('wardrobe-shirt').value,
+            skin: document.getElementById('wardrobe-skin').value
+          }
+        });
+        updateRoomUI();
+      };
+
+      list.appendChild(div);
+    }
+
+    function updateRoomUI() {
+      const count = Object.keys(NetworkEngine.peers).length + 1;
+      document.getElementById('room-player-count').innerText = count;
+      const list = document.getElementById('room-player-list');
+      list.innerHTML = `<li>${document.getElementById('prof-name').value} (You)</li>`;
+      
+      Object.values(NetworkEngine.peers).forEach(p => {
+        list.innerHTML += `<li>${p.name || 'Survivor'}</li>`;
+      });
+
+      if (NetworkEngine.isHost && count >= 2) {
+        document.getElementById('btn-start-multiplayer-game').style.display = 'block';
+        document.getElementById('waiting-msg').style.display = 'none';
+      }
+    }
+
+    document.getElementById('btn-start-multiplayer-game').onclick = () => {
+      NetworkEngine.broadcast(`granny_v4_room/${NetworkEngine.roomCode}`, {
+        type: 'START',
+        sender: NetworkEngine.myId
+      });
+      startGame();
+    };
+
+    // 11. WARDROBE 3D PREVIEW RIG
+    const WardrobePreview = {
+      renderer: null,
+      scene: null,
+      camera: null,
+      avatarGroup: null,
+      bodyMesh: null,
+      headMesh: null,
+      legsMesh: null,
+
+      init() {
+        const containerBox = document.getElementById('wardrobe-canvas');
+        if (!containerBox || this.renderer) return;
+
+        this.scene = new THREE.Scene();
+        this.camera = new THREE.PerspectiveCamera(45, containerBox.clientWidth / containerBox.clientHeight, 0.1, 10);
+        this.camera.position.set(0, 1.3, 2.8);
+
+        this.renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
+        this.renderer.setSize(containerBox.clientWidth, containerBox.clientHeight);
+        containerBox.appendChild(this.renderer.domElement);
+
+        const dirLight = new THREE.DirectionalLight(0xffffff, 1.4);
+        dirLight.position.set(1, 2, 2);
+        this.scene.add(dirLight);
+        this.scene.add(new THREE.AmbientLight(0x555555));
+
+        this.avatarGroup = new THREE.Group();
+
+        // Torso / Shirt
+        this.bodyMesh = new THREE.Mesh(
+          new THREE.CylinderGeometry(0.3, 0.3, 1.0, 12),
+          new THREE.MeshStandardMaterial({ color: document.getElementById('wardrobe-shirt').value, roughness: 0.7 })
+        );
+        this.bodyMesh.position.y = 0.9;
+        this.avatarGroup.add(this.bodyMesh);
+
+        // Head / Skin
+        this.headMesh = new THREE.Mesh(
+          new THREE.SphereGeometry(0.24, 16, 16),
+          new THREE.MeshStandardMaterial({ color: document.getElementById('wardrobe-skin').value, roughness: 0.8 })
+        );
+        this.headMesh.position.y = 1.62;
+        this.avatarGroup.add(this.headMesh);
+
+        // Pants / Legs
+        this.legsMesh = new THREE.Mesh(
+          new THREE.CylinderGeometry(0.32, 0.32, 0.5, 12),
+          new THREE.MeshStandardMaterial({ color: document.getElementById('wardrobe-pants').value, roughness: 0.9 })
+        );
+        this.legsMesh.position.y = 0.25;
+        this.avatarGroup.add(this.legsMesh);
+
+        this.scene.add(this.avatarGroup);
+        this.animate();
+
+        // Live Color Inputs
+        document.getElementById('wardrobe-shirt').oninput = (e) => {
+          this.bodyMesh.material.color.set(e.target.value);
+        };
+        document.getElementById('wardrobe-skin').oninput = (e) => {
+          this.headMesh.material.color.set(e.target.value);
+        };
+        document.getElementById('wardrobe-pants').oninput = (e) => {
+          this.legsMesh.material.color.set(e.target.value);
+        };
+      },
+
+      animate() {
+        requestAnimationFrame(() => this.animate());
+        if (this.avatarGroup) this.avatarGroup.rotation.y += 0.015;
+        if (this.renderer) this.renderer.render(this.scene, this.camera);
+      }
+    };
+
+    // Hook Wardrobe button to initialize its 3D canvas
+    const origWardrobeBtn = document.getElementById('btn-wardrobe').onclick;
+    document.getElementById('btn-wardrobe').onclick = () => {
+      showScreen('wardrobe-modal');
+      WardrobePreview.init();
+    };
+
+    // 12. RUNTIME TICKING & MASTER RENDER LOOP
+    let lastTime = performance.now();
+    setInterval(() => { NetworkEngine.tickSync(); }, 50); // 20Hz Networking Sync
+
+    function gameLoop() {
+      requestAnimationFrame(gameLoop);
+      const now = performance.now();
+      const dt = Math.min((now - lastTime) / 1000, 0.08);
+      lastTime = now;
+
+      // Update Systems
+      Player.update(dt, camera);
+      MonsterAI.update(dt);
+      updateDroppedItemsPhysics(dt);
+
+      renderer.render(scene, camera);
+    }
+
+    // Handle Window Resizing
+    window.addEventListener('resize', () => {
+      camera.aspect = window.innerWidth / window.innerHeight;
+      camera.updateProjectionMatrix();
+      renderer.setSize(window.innerWidth, window.innerHeight);
+    });
+
+    // Start Engine
+    gameLoop();
