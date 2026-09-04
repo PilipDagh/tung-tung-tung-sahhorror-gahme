@@ -1,8 +1,7 @@
 /* =========================================================================
-   MAP.JS - 1:1 GRANNY MANOR PROCEDURAL ARCHITECTURE & COLLISION WORLD
+   MAP.JS - 1:1 GRANNY MANOR BLUEPRINT, CONTINUOUS FLOORS & DYNAMIC PROPS
    ========================================================================= */
 
-// 1. DYNAMIC PROCEDURAL PBR MATERIALS
 const Assets = {
   woodMat: null,
   wallMat: null,
@@ -43,7 +42,6 @@ const Assets = {
           ctx.beginPath(); ctx.arc(x + 24, y + 24, 7, 0, Math.PI * 2); ctx.fill();
         }
       }
-      // Grunge and grime stains
       for (let i = 0; i < 800; i++) {
         ctx.fillStyle = `rgba(15,12,8,${Math.random() * 0.25})`;
         ctx.fillRect(Math.random() * 512, Math.random() * 512, 4, 4);
@@ -51,11 +49,8 @@ const Assets = {
       return new THREE.CanvasTexture(c);
     };
 
-    const woodTex = makeWoodTexture();
-    const wallTex = makeWallpaperTexture();
-
-    this.woodMat = new THREE.MeshStandardMaterial({ map: woodTex, roughness: 0.85 });
-    this.wallMat = new THREE.MeshStandardMaterial({ map: wallTex, roughness: 0.92 });
+    this.woodMat = new THREE.MeshStandardMaterial({ map: makeWoodTexture(), roughness: 0.85 });
+    this.wallMat = new THREE.MeshStandardMaterial({ map: makeWallpaperTexture(), roughness: 0.92 });
     this.concreteMat = new THREE.MeshStandardMaterial({ color: 0x2a2a2a, roughness: 0.95 });
     this.metalMat = new THREE.MeshStandardMaterial({ color: 0x888888, metalness: 0.8, roughness: 0.3 });
     this.skinMat = new THREE.MeshStandardMaterial({ color: 0xb5a088, roughness: 0.8 });
@@ -66,9 +61,8 @@ const Assets = {
 };
 Assets.init();
 
-// 2. STATIC AABB COLLISION WORLD
 const CollisionWorld = {
-  boxes: [], // Array of THREE.Box3
+  boxes: [],
 
   addBox(minX, minY, minZ, maxX, maxY, maxZ) {
     const box = new THREE.Box3(
@@ -85,13 +79,13 @@ const CollisionWorld = {
   }
 };
 
-// 3. COMPLETE HOUSE BUILDER
 const House = {
   interactables: [],
   hidingSpots: [],
   doors: [],
   drawers: [],
-  droppedItems: [],
+  dynamicProps: [],
+  physicsItems: [],
   locks: {
     planks: 2,
     padlock: true,
@@ -114,135 +108,132 @@ const House = {
       return mesh;
     };
 
-    // --- 1. FLOOR SLABS & CEILINGS ---
-    // Basement Floor: Y = -5.8
-    makeSolidBox(32, 0.4, 32, 0, -5.8, 0, Assets.concreteMat);
-    // Ground Floor: Y = 0.0 (Split around stairwells)
-    makeSolidBox(22, 0.4, 32, -5, 0.0, 0, Assets.woodMat);
-    makeSolidBox(10, 0.4, 18, 11, 0.0, -7, Assets.woodMat);
-    // Upstairs Floor: Y = 5.6 (Split around grand stairwell opening)
-    makeSolidBox(32, 0.4, 18, 0, 5.6, -7, Assets.woodMat);
-    makeSolidBox(14, 0.4, 14, -9, 5.6, 9, Assets.woodMat);
-    makeSolidBox(8, 0.4, 14, 12, 5.6, 9, Assets.woodMat);
-    // Attic Floor: Y = 11.2
-    makeSolidBox(32, 0.4, 32, 0, 11.2, 0, Assets.woodMat);
+    // --- 1. CONTINUOUS SOLID FLOORS & CEILINGS (NO GAPS) ---
+    // Basement Floor: Y = -6.0
+    makeSolidBox(36, 0.4, 36, 0, -6.0, 0, Assets.concreteMat);
+    // Ground Floor: Y = 0.0 (Seamless slabs with precise stair cutouts)
+    makeSolidBox(24, 0.4, 36, -6, 0.0, 0, Assets.woodMat);
+    makeSolidBox(12, 0.4, 20, 12, 0.0, -8, Assets.woodMat);
+    makeSolidBox(12, 0.4, 6, 12, 0.0, 15, Assets.woodMat);
+    // Upstairs Floor: Y = 6.0
+    makeSolidBox(36, 0.4, 20, 0, 6.0, -8, Assets.woodMat);
+    makeSolidBox(16, 0.4, 16, -10, 6.0, 10, Assets.woodMat);
+    makeSolidBox(10, 0.4, 16, 13, 6.0, 10, Assets.woodMat);
+    // Attic Floor: Y = 12.0
+    makeSolidBox(36, 0.4, 36, 0, 12.0, 0, Assets.woodMat);
 
-    // Exterior Perimeter Walls
-    makeSolidBox(32, 22, 0.6, 0, 3.0, -16, Assets.wallMat);
-    makeSolidBox(32, 22, 0.6, 0, 3.0, 16, Assets.wallMat);
-    makeSolidBox(0.6, 22, 32, -16, 3.0, 0, Assets.wallMat);
-    makeSolidBox(0.6, 22, 32, 16, 3.0, 0, Assets.wallMat);
+    // Perimeter Exterior Enclosing Walls
+    makeSolidBox(36, 24, 0.6, 0, 3.0, -18, Assets.wallMat);
+    makeSolidBox(36, 24, 0.6, 0, 3.0, 18, Assets.wallMat);
+    makeSolidBox(0.6, 24, 36, -18, 3.0, 0, Assets.wallMat);
+    makeSolidBox(0.6, 24, 36, 18, 3.0, 0, Assets.wallMat);
 
     // --- 2. STAIRCASES ---
-    // Staircase 1: Ground Floor (0.0) up to Upstairs (5.6)
-    const steps1 = 14;
+    // Ground Floor to Upstairs (Y: 0.0 -> 6.0)
+    const steps1 = 15;
     for (let i = 0; i < steps1; i++) {
-      const stepY = 0.2 + i * (5.4 / steps1);
-      const stepZ = 13.5 - i * 0.72;
+      const stepY = 0.2 + i * (5.8 / steps1);
+      const stepZ = 13.5 - i * 0.7;
       makeSolidBox(3.4, 0.44, 0.78, 5.0, stepY, stepZ, Assets.woodMat);
     }
-
-    // Staircase 2: Ground Floor (0.0) down to Basement (-5.8)
-    const steps2 = 14;
+    // Ground Floor down to Basement (Y: 0.0 -> -6.0)
+    const steps2 = 15;
     for (let i = 0; i < steps2; i++) {
-      const stepY = -0.2 - i * (5.6 / steps2);
-      const stepZ = -1.5 - i * 0.75;
+      const stepY = -0.2 - i * (5.8 / steps2);
+      const stepZ = -2.0 - i * 0.75;
       makeSolidBox(3.2, 0.44, 0.78, -5.0, stepY, stepZ, Assets.concreteMat);
     }
 
-    // --- 3. UPSTAIRS: STARTING BEDROOM ---
-    // Architectural Wall with Door Opening into Hallway
-    this.buildWallWithDoor(scene, -8, 8.4, 3, 14, 5.2, 2.4, 4.4, 'x', {
+    // --- 3. UPSTAIRS: STARTING BEDROOM & INTERIOR WALLS ---
+    // South Wall with Fitted Doorway
+    this.buildWallWithDoor(scene, -8, 8.8, 2, 14, 5.6, 2.4, 4.4, 'x', {
       doorAngle: 0,
       openAngle: -Math.PI * 0.5,
-      hingeLeft: true
+      hingeLeft: true,
+      doorName: 'Starting Bedroom Door'
     });
-    // Partition Wall between Starting Bedroom and Bedroom 1
-    makeSolidBox(0.4, 5.2, 13, -1, 8.4, 9.5, Assets.wallMat);
+    // East Partition Wall between Starting Bedroom & Bedroom 1
+    makeSolidBox(0.4, 5.6, 16, -1, 8.8, 10, Assets.wallMat);
 
-    // THE STARTING BED (Hollow underside for hiding + Mattress & Pillows)
+    // THE STARTING BED (Elevated Frame + Under-Bed Hiding Spot)
     const bedGroup = new THREE.Group();
-    // 4 Corner Legs (Leaves the space underneath open!)
     const legGeo = new THREE.BoxGeometry(0.18, 0.8, 0.18);
     const leg1 = new THREE.Mesh(legGeo, Assets.woodMat); leg1.position.set(-1.6, 0.4, -2.4); bedGroup.add(leg1);
     const leg2 = new THREE.Mesh(legGeo, Assets.woodMat); leg2.position.set(1.6, 0.4, -2.4); bedGroup.add(leg2);
     const leg3 = new THREE.Mesh(legGeo, Assets.woodMat); leg3.position.set(-1.6, 0.4, 2.4); bedGroup.add(leg3);
     const leg4 = new THREE.Mesh(legGeo, Assets.woodMat); leg4.position.set(1.6, 0.4, 2.4); bedGroup.add(leg4);
-    // Mattress and Frame
+
     const mattress = new THREE.Mesh(new THREE.BoxGeometry(3.5, 0.55, 5.1), Assets.blanketMat);
     mattress.position.y = 1.05;
     bedGroup.add(mattress);
-    // Headboard
+
     const headboard = new THREE.Mesh(new THREE.BoxGeometry(3.7, 1.8, 0.25), Assets.woodMat);
     headboard.position.set(0, 1.3, 2.5);
     bedGroup.add(headboard);
-    // Pillow
+
     const pillow = new THREE.Mesh(new THREE.BoxGeometry(2.4, 0.22, 0.9), Assets.skinMat);
     pillow.position.set(0, 1.4, 1.8);
     bedGroup.add(pillow);
 
-    bedGroup.position.set(-9.0, 5.8, 9.0);
+    bedGroup.position.set(-9.0, 6.0, 9.5);
     scene.add(bedGroup);
 
-    // Bed Collision Box (Top Mattress & Frame Only)
-    CollisionWorld.addBox(-10.8, 6.4, 6.5, -7.2, 7.8, 11.6);
-    // Hiding Spot Underneath Bed
+    // Bed Collider
+    CollisionWorld.addBox(-10.8, 6.6, 7.0, -7.2, 8.0, 12.1);
+
     this.hidingSpots.push({
       id: 'starting-bed',
-      position: new THREE.Vector3(-9.0, 6.05, 9.0),
-      emergePosition: new THREE.Vector3(-6.6, 5.8, 8.5),
+      position: new THREE.Vector3(-9.0, 6.25, 9.5),
+      emergePosition: new THREE.Vector3(-6.6, 6.0, 8.5),
       type: 'bed'
     });
 
-    // BEDROOM DRESSER WITH INTERACTIVE SLIDING DRAWERS
-    this.buildDresserWithDrawers(scene, -3.2, 5.8, 4.2, 2, 'z');
+    // STARTING BEDROOM TIPPABLE TABLE + FRAGILE VASE
+    this.buildTippableTable(scene, -4.5, 6.0, 8.5);
 
-    // BEDROOM WARDROBE CLOSET (Hiding Spot with Openable Double Doors)
-    this.buildWardrobeCloset(scene, -13.2, 5.8, 5.0);
+    // Dresser with sliding drawers
+    this.buildDresserWithDrawers(scene, -3.0, 6.0, 4.0, 2, 'z');
 
-    // Bedside Table + Fragile Noise Vase
-    makeSolidBox(1.5, 1.4, 1.5, -4.5, 6.5, 9.0, Assets.woodMat);
-    this.spawnItem(scene, 'Vase', new THREE.Vector3(-4.5, 7.5, 9.0));
+    // Wardrobe closet
+    this.buildWardrobeCloset(scene, -13.5, 6.0, 5.0);
 
-    // --- 4. HIDDEN PAINTING & SECRET AREA (UPSTAIRS) ---
+    // --- 4. HIDDEN PAINTING & SECRET ROOM ---
     const painting = new THREE.Mesh(new THREE.BoxGeometry(2.4, 2.6, 0.15), Assets.woodMat);
-    painting.position.set(4.0, 8.4, -6.8);
+    painting.position.set(4.0, 8.8, -7.8);
     scene.add(painting);
 
     let paintingOpen = false;
     this.interactables.push({
       mesh: painting,
-      prompt: '[E] Slide Picture Frame',
+      prompt: '[E] Slide Painting',
       action: () => {
         paintingOpen = !paintingOpen;
         painting.position.x += paintingOpen ? 2.4 : -2.4;
         audio.playDoor();
-        return paintingOpen ? 'Revealed Secret Passageway behind painting!' : 'Closed picture frame.';
+        return paintingOpen ? 'Opened Secret Passage behind the painting!' : 'Closed picture frame.';
       }
     });
 
-    // --- 5. GROUND FLOOR: FOYER & 4-TIER BARRICADED FRONT EXIT DOOR ---
-    const frontDoor = new THREE.Mesh(new THREE.BoxGeometry(3.2, 4.6, 0.28), Assets.woodMat);
-    frontDoor.position.set(0, 2.3, 15.6);
+    // --- 5. GROUND FLOOR: FOYER & 4-TIER FRONT EXIT DOOR ---
+    const frontDoor = new THREE.Mesh(new THREE.BoxGeometry(3.2, 4.8, 0.28), Assets.woodMat);
+    frontDoor.position.set(0, 2.4, 17.6);
     scene.add(frontDoor);
-    const doorCollider = CollisionWorld.addBox(-1.6, 0.0, 15.3, 1.6, 4.8, 15.9);
+    const doorCollider = CollisionWorld.addBox(-1.6, 0.0, 17.3, 1.6, 4.8, 17.9);
 
-    // Plank 1 & Plank 2
     const plank1 = new THREE.Mesh(new THREE.BoxGeometry(3.6, 0.38, 0.18), Assets.woodMat);
-    plank1.position.set(0, 2.8, 15.3);
+    plank1.position.set(0, 2.9, 17.3);
     scene.add(plank1);
     const plank2 = new THREE.Mesh(new THREE.BoxGeometry(3.6, 0.38, 0.18), Assets.woodMat);
-    plank2.position.set(0, 1.6, 15.3);
+    plank2.position.set(0, 1.7, 17.3);
     scene.add(plank2);
 
-    // Padlock Mesh
     const padlock = new THREE.Mesh(new THREE.TorusGeometry(0.18, 0.04, 8, 16), Assets.metalMat);
-    padlock.position.set(0.6, 2.2, 15.3);
+    padlock.position.set(0.6, 2.3, 17.3);
     scene.add(padlock);
 
     this.interactables.push({
       mesh: frontDoor,
-      prompt: '[E] Escape Manor Front Door',
+      prompt: '[E] Escape Front Door',
       action: (inv) => {
         if (this.locks.planks > 0) {
           if (inv.has('Hammer')) {
@@ -269,14 +260,14 @@ const House = {
             audio.playTung();
             return 'Swiped Keycard! Electronic locks deactivated!';
           }
-          return 'Electronic security panel is active. Needs Keycard.';
+          return 'Electronic security panel active. Needs Keycard.';
         }
         if (this.locks.master) {
           if (inv.has('Master Key')) {
             this.locks.master = false;
             CollisionWorld.removeBox(doorCollider);
             triggerVictory('Escaped through the Front Door of the Manor!');
-            return 'Turned Master Key! You pushed the door open to freedom!';
+            return 'Turned Master Key! You are free!';
           }
           return 'Master deadbolt is locked. Needs Master Key.';
         }
@@ -293,9 +284,9 @@ const House = {
     carHood.position.set(0, 1.9, -2.4);
     car.add(carHood);
 
-    car.position.set(-7.0, -5.8, -6.0);
+    car.position.set(-7.0, -6.0, -6.0);
     scene.add(car);
-    CollisionWorld.addBox(-9.5, -5.8, -10.5, -4.5, -3.8, -1.5);
+    CollisionWorld.addBox(-9.5, -6.0, -10.5, -4.5, -4.0, -1.5);
 
     let hoodOpen = false;
     this.interactables.push({
@@ -338,99 +329,145 @@ const House = {
             audio.playTung();
             return 'Poured gasoline into fuel tank!';
           }
-          return 'Car gas tank is completely dry.';
+          return 'Car gas tank is empty.';
         }
         if (!this.locks.carKey) {
           if (inv.has('Car Key')) {
             this.locks.carKey = true;
-            triggerVictory('Started the car and rammed through the garage door!');
-            return 'Engine roared to life! Escaped!';
+            triggerVictory('Started the car and smashed through the garage door!');
+            return 'Engine started!';
           }
-          return 'Needs Car Key to ignite the starter motor.';
+          return 'Needs Car Key to ignite starter motor.';
         }
       }
     });
 
-    // --- 7. KEY ITEMS SCATTERED INTO DRAWERS & ROOMS ---
-    this.spawnItem(scene, 'Hammer', new THREE.Vector3(8.0, 0.8, -8.0));
-    this.spawnItem(scene, 'Padlock Key', new THREE.Vector3(-3.2, 6.7, 4.2)); // Inside Top Drawer
-    this.spawnItem(scene, 'Keycard', new THREE.Vector3(-11.0, -5.0, 8.0));
-    this.spawnItem(scene, 'Master Key', new THREE.Vector3(8.0, 11.6, 6.0)); // In Attic Rafters
-    this.spawnItem(scene, 'Spark Plug', new THREE.Vector3(-6.0, 6.6, -1.0));
-    this.spawnItem(scene, 'Car Battery', new THREE.Vector3(12.0, -5.0, -9.0));
-    this.spawnItem(scene, 'Gasoline Can', new THREE.Vector3(10.0, -5.0, -5.0));
-    this.spawnItem(scene, 'Car Key', new THREE.Vector3(-2.0, 0.8, 10.0));
-    this.spawnItem(scene, 'Tranquilizer Crossbow', new THREE.Vector3(8.0, 6.6, 4.0));
-    this.spawnItem(scene, 'Shotgun', new THREE.Vector3(-12.0, 0.8, -6.0));
+    // --- 7. SPAWN ITEMS WITH REAL PHYSICS (PUSHABLE/KICKABLE) ---
+    this.spawnPhysicsItem(scene, 'Hammer', new THREE.Vector3(8.0, 0.3, -8.0), 0.3);
+    this.spawnPhysicsItem(scene, 'Padlock Key', new THREE.Vector3(-3.0, 6.9, 4.0), 0.15);
+    this.spawnPhysicsItem(scene, 'Keycard', new THREE.Vector3(-11.0, -5.7, 8.0), 0.15);
+    this.spawnPhysicsItem(scene, 'Master Key', new THREE.Vector3(8.0, 12.3, 6.0), 0.15);
+    this.spawnPhysicsItem(scene, 'Spark Plug', new THREE.Vector3(-6.0, 6.3, -1.0), 0.2);
+    this.spawnPhysicsItem(scene, 'Car Battery', new THREE.Vector3(12.0, -5.7, -9.0), 0.4);
+    this.spawnPhysicsItem(scene, 'Gasoline Can', new THREE.Vector3(10.0, -5.7, -5.0), 0.35);
+    this.spawnPhysicsItem(scene, 'Car Key', new THREE.Vector3(-2.0, 0.3, 10.0), 0.15);
+    this.spawnPhysicsItem(scene, 'Tranquilizer Crossbow', new THREE.Vector3(8.0, 6.3, 4.0), 0.4);
+    this.spawnPhysicsItem(scene, 'Shotgun', new THREE.Vector3(-12.0, 0.3, -6.0), 0.45);
   },
 
-  // BUILD WALLS WITH PRECISE DOORWAY CUTOUTS & HINGED DOORS
+  // TIPPABLE SMALL TABLE WITH FRAGILE VASE (KNOCK-OVER MECHANIC)
+  buildTippableTable(scene, x, y, z) {
+    const tableGroup = new THREE.Group();
+
+    const top = new THREE.Mesh(new THREE.BoxGeometry(1.4, 0.12, 1.4), Assets.woodMat);
+    top.position.y = 1.35;
+    tableGroup.add(top);
+
+    const legGeo = new THREE.CylinderGeometry(0.05, 0.05, 1.35, 8);
+    const l1 = new THREE.Mesh(legGeo, Assets.woodMat); l1.position.set(0.55, 0.67, 0.55); tableGroup.add(l1);
+    const l2 = new THREE.Mesh(legGeo, Assets.woodMat); l2.position.set(-0.55, 0.67, 0.55); tableGroup.add(l2);
+    const l3 = new THREE.Mesh(legGeo, Assets.woodMat); l3.position.set(0.55, 0.67, -0.55); tableGroup.add(l3);
+    const l4 = new THREE.Mesh(legGeo, Assets.woodMat); l4.position.set(-0.55, 0.67, -0.55); tableGroup.add(l4);
+
+    // Fragile Vase on Table
+    const vase = new THREE.Mesh(new THREE.CylinderGeometry(0.12, 0.2, 0.5, 10), Assets.skinMat);
+    vase.position.set(0, 1.66, 0);
+    tableGroup.add(vase);
+
+    tableGroup.position.set(x, y, z);
+    scene.add(tableGroup);
+
+    const prop = {
+      type: 'table',
+      group: tableGroup,
+      vaseMesh: vase,
+      isTipped: false,
+      velocity: new THREE.Vector3(),
+      rotVel: 0,
+      radius: 0.75,
+      height: 1.45,
+      yPos: y
+    };
+    this.dynamicProps.push(prop);
+  },
+
+  // WALLS WITH DOORS & SMOOTH ROTATION
   buildWallWithDoor(scene, cx, cy, cz, totalW, totalH, doorW, doorH, axis, opts = {}) {
     const wallThick = 0.4;
     const sideW = (totalW - doorW) / 2;
     const headerH = totalH - doorH;
 
-    if (axis === 'x') {
-      // Left Wall Chunk
-      const leftX = cx - totalW / 2 + sideW / 2;
-      const leftWall = new THREE.Mesh(new THREE.BoxGeometry(sideW, totalH, wallThick), Assets.wallMat);
-      leftWall.position.set(leftX, cy, cz);
-      scene.add(leftWall);
-      CollisionWorld.addBox(leftX - sideW / 2, cy - totalH / 2, cz - wallThick / 2, leftX + sideW / 2, cy + totalH / 2, cz + wallThick / 2);
+    const leftX = cx - totalW / 2 + sideW / 2;
+    const leftWall = new THREE.Mesh(new THREE.BoxGeometry(sideW, totalH, wallThick), Assets.wallMat);
+    leftWall.position.set(leftX, cy, cz);
+    scene.add(leftWall);
+    CollisionWorld.addBox(leftX - sideW / 2, cy - totalH / 2, cz - wallThick / 2, leftX + sideW / 2, cy + totalH / 2, cz + wallThick / 2);
 
-      // Right Wall Chunk
-      const rightX = cx + totalW / 2 - sideW / 2;
-      const rightWall = new THREE.Mesh(new THREE.BoxGeometry(sideW, totalH, wallThick), Assets.wallMat);
-      rightWall.position.set(rightX, cy, cz);
-      scene.add(rightWall);
-      CollisionWorld.addBox(rightX - sideW / 2, cy - totalH / 2, cz - wallThick / 2, rightX + sideW / 2, cy + totalH / 2, cz + wallThick / 2);
+    const rightX = cx + totalW / 2 - sideW / 2;
+    const rightWall = new THREE.Mesh(new THREE.BoxGeometry(sideW, totalH, wallThick), Assets.wallMat);
+    rightWall.position.set(rightX, cy, cz);
+    scene.add(rightWall);
+    CollisionWorld.addBox(rightX - sideW / 2, cy - totalH / 2, cz - wallThick / 2, rightX + sideW / 2, cy + totalH / 2, cz + wallThick / 2);
 
-      // Top Header / Lintel Chunk
-      const headerY = cy + totalH / 2 - headerH / 2;
-      const headerWall = new THREE.Mesh(new THREE.BoxGeometry(doorW, headerH, wallThick), Assets.wallMat);
-      headerWall.position.set(cx, headerY, cz);
-      scene.add(headerWall);
-      CollisionWorld.addBox(cx - doorW / 2, headerY - headerH / 2, cz - wallThick / 2, cx + doorW / 2, headerY + headerH / 2, cz + wallThick / 2);
+    const headerY = cy + totalH / 2 - headerH / 2;
+    const headerWall = new THREE.Mesh(new THREE.BoxGeometry(doorW, headerH, wallThick), Assets.wallMat);
+    headerWall.position.set(cx, headerY, cz);
+    scene.add(headerWall);
+    CollisionWorld.addBox(cx - doorW / 2, headerY - headerH / 2, cz - wallThick / 2, cx + doorW / 2, headerY + headerH / 2, cz + wallThick / 2);
 
-      // Hinged Door Assembly
-      const doorPivot = new THREE.Group();
-      const hingeX = opts.hingeLeft ? (cx - doorW / 2) : (cx + doorW / 2);
-      doorPivot.position.set(hingeX, cy - totalH / 2 + doorH / 2, cz);
+    const doorPivot = new THREE.Group();
+    const hingeX = opts.hingeLeft ? (cx - doorW / 2) : (cx + doorW / 2);
+    doorPivot.position.set(hingeX, cy - totalH / 2 + doorH / 2, cz);
 
-      const doorMesh = new THREE.Mesh(new THREE.BoxGeometry(doorW, doorH, 0.18), Assets.woodMat);
-      doorMesh.position.set(opts.hingeLeft ? (doorW / 2) : (-doorW / 2), 0, 0);
-      doorPivot.add(doorMesh);
+    const doorMesh = new THREE.Mesh(new THREE.BoxGeometry(doorW, doorH, 0.18), Assets.woodMat);
+    doorMesh.position.set(opts.hingeLeft ? (doorW / 2) : (-doorW / 2), 0, 0);
+    doorPivot.add(doorMesh);
 
-      // Brass Doorknob
-      const knob = new THREE.Mesh(new THREE.SphereGeometry(0.08, 8, 8), Assets.metalMat);
-      knob.position.set(opts.hingeLeft ? (doorW - 0.25) : (-doorW + 0.25), 0, 0.12);
-      doorPivot.add(knob);
+    const knob = new THREE.Mesh(new THREE.SphereGeometry(0.08, 8, 8), Assets.metalMat);
+    knob.position.set(opts.hingeLeft ? (doorW - 0.25) : (-doorW + 0.25), 0, 0.12);
+    doorPivot.add(knob);
 
-      scene.add(doorPivot);
+    scene.add(doorPivot);
 
-      let doorCollider = CollisionWorld.addBox(cx - doorW / 2, cy - totalH / 2, cz - 0.2, cx + doorW / 2, cy - totalH / 2 + doorH, cz + 0.2);
-      let isOpen = false;
+    const doorObj = {
+      pivot: doorPivot,
+      mesh: doorMesh,
+      collider: CollisionWorld.addBox(cx - doorW / 2, cy - totalH / 2, cz - 0.2, cx + doorW / 2, cy - totalH / 2 + doorH, cz + 0.2),
+      isOpen: false,
+      currentAngle: 0,
+      targetAngle: 0,
+      openAngle: opts.openAngle || -Math.PI * 0.5,
+      closedAngle: opts.doorAngle || 0,
+      boxCoords: { minX: cx - doorW / 2, minY: cy - totalH / 2, minZ: cz - 0.2, maxX: cx + doorW / 2, maxY: cy - totalH / 2 + doorH, maxZ: cz + 0.2 }
+    };
+    this.doors.push(doorObj);
 
-      this.interactables.push({
-        mesh: doorMesh,
-        prompt: '[E] Open / Close Door',
-        action: () => {
-          isOpen = !isOpen;
-          doorPivot.rotation.y = isOpen ? (opts.openAngle || -Math.PI * 0.5) : (opts.doorAngle || 0);
-          audio.playDoor();
-          if (isOpen) {
-            CollisionWorld.removeBox(doorCollider);
-            doorCollider = null;
-          } else {
-            doorCollider = CollisionWorld.addBox(cx - doorW / 2, cy - totalH / 2, cz - 0.2, cx + doorW / 2, cy - totalH / 2 + doorH, cz + 0.2);
+    this.interactables.push({
+      mesh: doorMesh,
+      prompt: `[E] ${opts.doorName || 'Door'}`,
+      action: () => {
+        doorObj.isOpen = !doorObj.isOpen;
+        doorObj.targetAngle = doorObj.isOpen ? doorObj.openAngle : doorObj.closedAngle;
+        audio.playDoor();
+
+        if (doorObj.isOpen) {
+          if (doorObj.collider) {
+            CollisionWorld.removeBox(doorObj.collider);
+            doorObj.collider = null;
           }
-          return isOpen ? 'Opened Door.' : 'Closed Door.';
+        } else {
+          if (!doorObj.collider) {
+            doorObj.collider = CollisionWorld.addBox(
+              doorObj.boxCoords.minX, doorObj.boxCoords.minY, doorObj.boxCoords.minZ,
+              doorObj.boxCoords.maxX, doorObj.boxCoords.maxY, doorObj.boxCoords.maxZ
+            );
+          }
         }
-      });
-    }
+        return doorObj.isOpen ? 'Opened Door.' : 'Closed Door.';
+      }
+    });
   },
 
-  // BUILD DRESSERS WITH REAL PULL-OUT DRAWERS
   buildDresserWithDrawers(scene, x, y, z, drawerCount, axis) {
     const dresserW = 2.0, dresserH = 2.4, dresserD = 1.4;
     const body = new THREE.Mesh(new THREE.BoxGeometry(dresserW, dresserH, dresserD), Assets.woodMat);
@@ -453,21 +490,29 @@ const House = {
       drawerGroup.position.set(x, dY, z + dresserD / 2);
       scene.add(drawerGroup);
 
-      let isPulled = false;
+      const drawerObj = {
+        group: drawerGroup,
+        isOpen: false,
+        currentZ: z + dresserD / 2,
+        targetZ: z + dresserD / 2,
+        closedZ: z + dresserD / 2,
+        openZ: z + dresserD / 2 + 0.65
+      };
+      this.drawers.push(drawerObj);
+
       this.interactables.push({
         mesh: dFront,
-        prompt: '[E] Open / Close Drawer',
+        prompt: '[E] Drawer',
         action: () => {
-          isPulled = !isPulled;
-          drawerGroup.position.z += isPulled ? 0.6 : -0.6;
+          drawerObj.isOpen = !drawerObj.isOpen;
+          drawerObj.targetZ = drawerObj.isOpen ? drawerObj.openZ : drawerObj.closedZ;
           audio.playDrawer();
-          return isPulled ? 'Opened Drawer.' : 'Closed Drawer.';
+          return drawerObj.isOpen ? 'Opened Drawer.' : 'Closed Drawer.';
         }
       });
     }
   },
 
-  // BUILD REAL WARDROBE CLOSET WITH INTERACTIVE DOUBLE DOORS
   buildWardrobeCloset(scene, x, y, z) {
     const wW = 2.4, wH = 4.6, wD = 1.6;
     const wardrobeFrame = new THREE.Mesh(new THREE.BoxGeometry(wW, wH, wD), Assets.woodMat);
@@ -475,7 +520,6 @@ const House = {
     scene.add(wardrobeFrame);
     CollisionWorld.addBox(x - wW / 2, y, z - wD / 2, x + wW / 2, y + wH, z + wD / 2);
 
-    // Register Closet Hiding Spot
     this.hidingSpots.push({
       id: 'bedroom-closet',
       position: new THREE.Vector3(x, y + 1.2, z + 0.1),
@@ -484,8 +528,8 @@ const House = {
     });
   },
 
-  // SPAWN INTERACTABLE GAME ITEMS
-  spawnItem(scene, name, pos) {
+  // DYNAMIC ITEMS WITH VELOCITY & KICK PHYSICS
+  spawnPhysicsItem(scene, name, pos, radius = 0.25) {
     const group = new THREE.Group();
     let mesh;
 
@@ -507,7 +551,17 @@ const House = {
     group.position.copy(pos);
     scene.add(group);
 
-    const record = { name, group, mesh, inInventory: false };
+    const record = {
+      name,
+      group,
+      mesh,
+      radius,
+      velocity: new THREE.Vector3(0, 0, 0),
+      inInventory: false,
+      isGrounded: true
+    };
+    this.physicsItems.push(record);
+
     this.interactables.push({
       mesh,
       prompt: `[E] Pick up ${name}`,
