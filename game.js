@@ -1,6 +1,11 @@
 /* =========================================================================
-   GAME.JS - GRANNY TUNG TUNG SAHUR AI, NO-TUNNEL PHYSICS & 120 FPS ENGINE
+   GAME.JS - LAG-FREE PHYSICS, SMART TUNG TUNG SAHUR AI & ZERO ALLOCATION LOOP
    ========================================================================= */
+
+// Pre-allocated static vectors for 0-allocation physics & collision checks
+const _tempVecA = new THREE.Vector3();
+const _tempRayOrigin = new THREE.Vector3();
+const _tempClampPt = new THREE.Vector3();
 
 // 1. WAYPOINT GRAPH FOR GRANNY NAVIGATION
 const NavGraph = {
@@ -304,7 +309,6 @@ const Player = {
       move.applyAxisAngle(new THREE.Vector3(0, 1, 0), this.rotation.y);
     }
 
-    // Gravity
     this.velocity.y -= 22 * dt;
     if (this.velocity.y < -25) this.velocity.y = -25;
 
@@ -328,32 +332,48 @@ const Player = {
   },
 
   checkDynamicCollisions(moveDir, speed) {
-    for (const item of House.physicsItems) {
+    const now = performance.now();
+
+    // 1. Kick/push dynamic items on the floor (throttled impulse)
+    for (let i = 0; i < House.physicsItems.length; i++) {
+      const item = House.physicsItems[i];
       if (item.inInventory) continue;
-      const d = new THREE.Vector2(this.position.x - item.group.position.x, this.position.z - item.group.position.z);
-      const dist = d.length();
+
+      const dx = this.position.x - item.group.position.x;
+      const dz = this.position.z - item.group.position.z;
+      const distSq = dx * dx + dz * dz;
       const minDist = this.radius + item.radius;
 
-      if (dist < minDist && dist > 0.01) {
-        d.normalize();
+      if (distSq < (minDist * minDist) && distSq > 0.001) {
+        const dist = Math.sqrt(distSq);
+        const nx = dx / dist;
+        const nz = dz / dist;
         const pushForce = Math.max(speed * 0.8, 2.5);
-        item.velocity.x -= d.x * pushForce;
-        item.velocity.z -= d.y * pushForce;
-        audio.playItemDrop(item.name);
-        MonsterAI.hearNoise(item.group.position, 10);
+
+        item.velocity.x -= nx * pushForce;
+        item.velocity.z -= nz * pushForce;
+
+        if (now - item.lastPushTime > 400) {
+          item.lastPushTime = now;
+          audio.playItemDrop(item.name);
+          MonsterAI.hearNoise(item.group.position, 10);
+        }
       }
     }
 
-    for (const prop of House.dynamicProps) {
+    // 2. Tippable Bedside Table Knockdown Check (Debounced)
+    for (let i = 0; i < House.dynamicProps.length; i++) {
+      const prop = House.dynamicProps[i];
       if (prop.type === 'table' && !prop.isTipped) {
-        const d = new THREE.Vector2(this.position.x - prop.group.position.x, this.position.z - prop.group.position.z);
-        const dist = d.length();
+        const dx = this.position.x - prop.group.position.x;
+        const dz = this.position.z - prop.group.position.z;
+        const distSq = dx * dx + dz * dz;
 
-        if (dist < (this.radius + prop.radius)) {
-          d.normalize();
+        if (distSq < (this.radius + prop.radius) * (this.radius + prop.radius)) {
+          const dist = Math.sqrt(distSq);
           prop.isTipped = true;
           prop.rotVel = Math.PI * 1.5;
-          prop.velocity.set(-d.x * 2.0, 0, -d.y * 2.0);
+          prop.velocity.set(-(dx / dist) * 2.0, 0, -(dz / dist) * 2.0);
 
           audio.playItemDrop('Table');
           MonsterAI.hearNoise(prop.group.position, 25);
@@ -378,7 +398,8 @@ const Player = {
 
     let stepUpY = target.y;
 
-    for (const box of CollisionWorld.boxes) {
+    for (let i = 0; i < CollisionWorld.boxes.length; i++) {
+      const box = CollisionWorld.boxes[i];
       const xOverlap = pMinX < box.max.x && pMaxX > box.min.x;
       const zOverlap = pMinZ < box.max.z && pMaxZ > box.min.z;
 
@@ -413,7 +434,8 @@ const Player = {
 
     if (dy <= 0) {
       let highestFloor = -999;
-      for (const box of CollisionWorld.boxes) {
+      for (let i = 0; i < CollisionWorld.boxes.length; i++) {
+        const box = CollisionWorld.boxes[i];
         if (pMinX < box.max.x && pMaxX > box.min.x && pMinZ < box.max.z && pMaxZ > box.min.z) {
           if (box.max.y <= this.position.y + 0.25 && box.max.y >= targetY - 0.25) {
             if (box.max.y > highestFloor) highestFloor = box.max.y;
@@ -428,7 +450,7 @@ const Player = {
         return;
       }
 
-      // Safeguard against void fall in defined rooms
+      // Absolute floor clamp safeguard
       if (targetY < -6.0) {
         this.position.y = -6.0;
         this.velocity.y = 0;
@@ -438,7 +460,8 @@ const Player = {
 
       this.position.y = targetY;
     } else {
-      for (const box of CollisionWorld.boxes) {
+      for (let i = 0; i < CollisionWorld.boxes.length; i++) {
+        const box = CollisionWorld.boxes[i];
         if (pMinX < box.max.x && pMaxX > box.min.x && pMinZ < box.max.z && pMaxZ > box.min.z) {
           if (box.min.y >= this.position.y + pHeight && box.min.y <= targetY + pHeight) {
             this.velocity.y = 0;
@@ -557,21 +580,24 @@ const Inventory = {
 
 // 5. UPDATE PROPS & DOORS INTERPOLATION
 function updatePhysicsAndWorld(dt) {
-  for (const door of House.doors) {
+  for (let i = 0; i < House.doors.length; i++) {
+    const door = House.doors[i];
     if (Math.abs(door.currentAngle - door.targetAngle) > 0.01) {
       door.currentAngle = THREE.MathUtils.damp(door.currentAngle, door.targetAngle, 10, dt);
       door.pivot.rotation.y = door.currentAngle;
     }
   }
 
-  for (const drawer of House.drawers) {
+  for (let i = 0; i < House.drawers.length; i++) {
+    const drawer = House.drawers[i];
     if (Math.abs(drawer.currentZ - drawer.targetZ) > 0.005) {
       drawer.currentZ = THREE.MathUtils.damp(drawer.currentZ, drawer.targetZ, 8, dt);
       drawer.group.position.z = drawer.currentZ;
     }
   }
 
-  for (const prop of House.dynamicProps) {
+  for (let i = 0; i < House.dynamicProps.length; i++) {
+    const prop = House.dynamicProps[i];
     if (prop.type === 'table' && prop.isTipped && prop.group.rotation.z < Math.PI * 0.5) {
       prop.group.rotation.z += prop.rotVel * dt;
       prop.group.position.addScaledVector(prop.velocity, dt);
@@ -583,7 +609,8 @@ function updatePhysicsAndWorld(dt) {
     }
   }
 
-  for (const item of House.physicsItems) {
+  for (let i = 0; i < House.physicsItems.length; i++) {
+    const item = House.physicsItems[i];
     if (item.inInventory) continue;
 
     if (!item.isGrounded) {
@@ -591,7 +618,8 @@ function updatePhysicsAndWorld(dt) {
       item.group.position.addScaledVector(item.velocity, dt);
 
       const pos = item.group.position;
-      for (const box of CollisionWorld.boxes) {
+      for (let j = 0; j < CollisionWorld.boxes.length; j++) {
+        const box = CollisionWorld.boxes[j];
         if (pos.x >= box.min.x && pos.x <= box.max.x && pos.z >= box.min.z && pos.z <= box.max.z) {
           if (pos.y <= box.max.y + 0.15 && pos.y >= box.min.y) {
             pos.y = box.max.y + 0.08;
@@ -629,12 +657,13 @@ const MonsterAI = {
   animTime: 0,
   rightArm: null,
   head: null,
+  losCheckFrame: 0,
+  lastCanSeeResult: false,
 
-  // DETAILED TUNG TUNG SAHUR CHARACTER MODEL
   init(scene) {
     const g = new THREE.Group();
 
-    // Batik Cloth Sarong / Tattered Nightgown
+    // Batik Cloth Sarong
     const sarongCanvas = document.createElement('canvas');
     sarongCanvas.width = 128; sarongCanvas.height = 128;
     const sCtx = sarongCanvas.getContext('2d');
@@ -656,21 +685,21 @@ const MonsterAI = {
     torso.rotation.x = 0.22;
     g.add(torso);
 
-    // Iconic Sahur Kentongan (Slit Drum) slung across chest
+    // Sahur Kentongan (Slit Drum) slung across chest
     const kentongan = new THREE.Mesh(new THREE.CylinderGeometry(0.12, 0.12, 0.75, 8), woodMat);
     kentongan.rotation.z = Math.PI * 0.45;
     kentongan.rotation.x = 0.3;
     kentongan.position.set(0.1, 1.35, 0.48);
     g.add(kentongan);
 
-    // Terrifying Sahur Head
+    // Head
     const headGroup = new THREE.Group();
     headGroup.position.set(0, 2.35, 0.25);
 
     const skull = new THREE.Mesh(new THREE.SphereGeometry(0.36, 10, 10), skinMat);
     headGroup.add(skull);
 
-    // Glowing Red Sahur Eyes
+    // Glowing Red Eyes
     const eyeMat = new THREE.MeshBasicMaterial({ color: 0xff0000 });
     const eye1 = new THREE.Mesh(new THREE.SphereGeometry(0.065, 6, 6), eyeMat);
     eye1.position.set(-0.13, 0.06, 0.32);
@@ -679,7 +708,6 @@ const MonsterAI = {
     headGroup.add(eye1);
     headGroup.add(eye2);
 
-    // Scraggly Hair
     const hair = new THREE.Mesh(new THREE.BoxGeometry(0.65, 0.2, 0.65), new THREE.MeshStandardMaterial({ color: 0x888888, roughness: 0.9 }));
     hair.position.set(0, 0.22, -0.05);
     headGroup.add(hair);
@@ -687,7 +715,7 @@ const MonsterAI = {
     g.add(headGroup);
     this.head = headGroup;
 
-    // Right Arm with Heavy Wooden Beater / Mallet
+    // Right Arm with Mallet / Beater
     const arm = new THREE.Group();
     arm.position.set(0.65, 1.9, 0.15);
 
@@ -750,32 +778,46 @@ const MonsterAI = {
   hasLineOfSightToPlayer() {
     if (Player.isHiding || Player.isIntroPlaying) return false;
 
-    const toPlayer = new THREE.Vector3().subVectors(Player.position, this.mesh.position);
-    const dist = toPlayer.length();
-    if (dist > this.visionRange) return false;
+    // Run LOS raycasting once every 4 frames for performance
+    this.losCheckFrame++;
+    if (this.losCheckFrame % 4 !== 0) {
+      return this.lastCanSeeResult;
+    }
+
+    _tempVecA.subVectors(Player.position, this.mesh.position);
+    const dist = _tempVecA.length();
+    if (dist > this.visionRange) {
+      this.lastCanSeeResult = false;
+      return false;
+    }
 
     const fwd = new THREE.Vector3(0, 0, 1).applyEuler(this.mesh.rotation);
-    toPlayer.normalize();
+    _tempVecA.normalize();
 
     // 75-degree vision cone: if her back is turned, she CANNOT see you!
-    const angle = fwd.angleTo(toPlayer);
-    if (angle > this.visionAngle) return false;
+    const angle = fwd.angleTo(_tempVecA);
+    if (angle > this.visionAngle) {
+      this.lastCanSeeResult = false;
+      return false;
+    }
 
-    // Fast Line of Sight Raycast check
-    const ray = new THREE.Ray(
-      new THREE.Vector3(this.mesh.position.x, this.mesh.position.y + 1.8, this.mesh.position.z),
-      toPlayer
-    );
+    _tempRayOrigin.set(this.mesh.position.x, this.mesh.position.y + 1.8, this.mesh.position.z);
+    const ray = new THREE.Ray(_tempRayOrigin, _tempVecA);
 
-    for (let i = 0; i < CollisionWorld.boxes.length; i += 2) {
-      const box = CollisionWorld.boxes[i];
-      if (box.max.y > 6.5 || box.max.y > 0.5) {
-        if (box.intersectsRay(ray)) {
-          const pt = box.clampPoint(ray.origin, new THREE.Vector3());
-          if (ray.origin.distanceTo(pt) < dist - 0.5) return false;
+    // Fast check against walls and closed doors
+    const walls = CollisionWorld.wallsAndDoors;
+    for (let i = 0; i < walls.length; i++) {
+      const box = walls[i];
+      if (box.intersectsRay(ray)) {
+        box.clampPoint(ray.origin, _tempClampPt);
+        if (ray.origin.distanceTo(_tempClampPt) < dist - 0.5) {
+          this.lastCanSeeResult = false;
+          return false;
         }
       }
     }
+
+    this.lastCanSeeResult = true;
     return true;
   },
 
@@ -803,7 +845,6 @@ const MonsterAI = {
     if (!this.mesh) return;
 
     this.animTime += dt;
-    // Mallet & hunch breathing animation
     if (this.rightArm) {
       this.rightArm.rotation.x = -0.3 + Math.sin(this.animTime * (this.state === 'CHASE' ? 8 : 4)) * 0.35;
     }
@@ -1041,7 +1082,8 @@ function doInteract(camera) {
     return;
   }
 
-  for (const spot of House.hidingSpots) {
+  for (let i = 0; i < House.hidingSpots.length; i++) {
+    const spot = House.hidingSpots[i];
     if (Player.position.distanceTo(spot.position) < 2.5) {
       Player.isHiding = true;
       Player.hidingSpot = spot;
@@ -1358,7 +1400,7 @@ canvasContainer.appendChild(renderer.domElement);
 const ambLight = new THREE.AmbientLight(0x353535);
 scene.add(ambLight);
 
-// Optimized room point lights (dynamic shadows disabled to ensure 60-120 FPS)
+// Optimized room point lights (shadow map depth rendering disabled for FPS)
 const bedroomLamp = new THREE.PointLight(0xffaa44, 1.0, 14);
 bedroomLamp.position.set(-8, 9.5, 8);
 scene.add(bedroomLamp);
@@ -1523,7 +1565,7 @@ setInterval(() => { NetworkEngine.tickSync(); }, 50);
 function gameLoop() {
   requestAnimationFrame(gameLoop);
   const now = performance.now();
-  const dt = Math.min((now - lastTime) / 1000, 0.05); // Capped delta prevents tunneling
+  const dt = Math.min((now - lastTime) / 1000, 0.033);
   lastTime = now;
 
   Player.update(dt, camera);
