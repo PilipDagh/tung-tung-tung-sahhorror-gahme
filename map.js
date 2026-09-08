@@ -1,5 +1,5 @@
 /* =========================================================================
-   MAP.JS - 1:1 GRANNY MANOR BLUEPRINT, CONTINUOUS FLOORS & DYNAMIC PROPS
+   MAP.JS - PRECISE ARCHITECTURAL MANOR, ZERO-GAP FLOORS & DYNAMIC PROPS
    ========================================================================= */
 
 const Assets = {
@@ -14,43 +14,39 @@ const Assets = {
 
   init() {
     const makeWoodTexture = () => {
-      const c = document.createElement('canvas'); c.width = 512; c.height = 512;
+      const c = document.createElement('canvas'); c.width = 256; c.height = 256;
       const ctx = c.getContext('2d');
-      ctx.fillStyle = '#2d1c12'; ctx.fillRect(0, 0, 512, 512);
+      ctx.fillStyle = '#2d1c12'; ctx.fillRect(0, 0, 256, 256);
       ctx.strokeStyle = '#1a0f08';
-      for (let i = 0; i < 48; i++) {
-        ctx.lineWidth = 1 + Math.random() * 3;
+      for (let i = 0; i < 32; i++) {
+        ctx.lineWidth = 1 + Math.random() * 2;
         ctx.beginPath();
-        const y = Math.random() * 512;
+        const y = Math.random() * 256;
         ctx.moveTo(0, y);
-        ctx.bezierCurveTo(150, y + (Math.random() - 0.5) * 30, 350, y + (Math.random() - 0.5) * 30, 512, y);
+        ctx.bezierCurveTo(80, y + (Math.random() - 0.5) * 20, 180, y + (Math.random() - 0.5) * 20, 256, y);
         ctx.stroke();
-      }
-      for (let x = 0; x < 512; x += 128) {
-        ctx.fillStyle = '#100a06'; ctx.fillRect(x, 0, 3, 512);
       }
       return new THREE.CanvasTexture(c);
     };
 
     const makeWallpaperTexture = () => {
-      const c = document.createElement('canvas'); c.width = 512; c.height = 512;
+      const c = document.createElement('canvas'); c.width = 256; c.height = 256;
       const ctx = c.getContext('2d');
-      ctx.fillStyle = '#303227'; ctx.fillRect(0, 0, 512, 512);
+      ctx.fillStyle = '#303227'; ctx.fillRect(0, 0, 256, 256);
       ctx.fillStyle = '#22241b';
-      for (let x = 0; x < 512; x += 48) {
-        for (let y = 0; y < 512; y += 48) {
-          ctx.beginPath(); ctx.arc(x + 24, y + 24, 7, 0, Math.PI * 2); ctx.fill();
+      for (let x = 0; x < 256; x += 32) {
+        for (let y = 0; y < 256; y += 32) {
+          ctx.beginPath(); ctx.arc(x + 16, y + 16, 5, 0, Math.PI * 2); ctx.fill();
         }
-      }
-      for (let i = 0; i < 800; i++) {
-        ctx.fillStyle = `rgba(15,12,8,${Math.random() * 0.25})`;
-        ctx.fillRect(Math.random() * 512, Math.random() * 512, 4, 4);
       }
       return new THREE.CanvasTexture(c);
     };
 
-    this.woodMat = new THREE.MeshStandardMaterial({ map: makeWoodTexture(), roughness: 0.85 });
-    this.wallMat = new THREE.MeshStandardMaterial({ map: makeWallpaperTexture(), roughness: 0.92 });
+    const woodTex = makeWoodTexture();
+    const wallTex = makeWallpaperTexture();
+
+    this.woodMat = new THREE.MeshStandardMaterial({ map: woodTex, roughness: 0.85 });
+    this.wallMat = new THREE.MeshStandardMaterial({ map: wallTex, roughness: 0.92 });
     this.concreteMat = new THREE.MeshStandardMaterial({ color: 0x2a2a2a, roughness: 0.95 });
     this.metalMat = new THREE.MeshStandardMaterial({ color: 0x888888, metalness: 0.8, roughness: 0.3 });
     this.skinMat = new THREE.MeshStandardMaterial({ color: 0xb5a088, roughness: 0.8 });
@@ -101,67 +97,72 @@ const House = {
     const makeSolidBox = (w, h, d, x, y, z, mat) => {
       const mesh = new THREE.Mesh(new THREE.BoxGeometry(w, h, d), mat);
       mesh.position.set(x, y, z);
-      mesh.castShadow = true;
       mesh.receiveShadow = true;
       scene.add(mesh);
       CollisionWorld.addBox(x - w / 2, y - h / 2, z - d / 2, x + w / 2, y + h / 2, z + d / 2);
       return mesh;
     };
 
-    // --- 1. CONTINUOUS SOLID FLOORS & CEILINGS (NO GAPS) ---
-    // Basement Floor: Y = -6.0
-    makeSolidBox(36, 0.4, 36, 0, -6.0, 0, Assets.concreteMat);
-    // Ground Floor: Y = 0.0 (Seamless slabs with precise stair cutouts)
-    makeSolidBox(24, 0.4, 36, -6, 0.0, 0, Assets.woodMat);
-    makeSolidBox(12, 0.4, 20, 12, 0.0, -8, Assets.woodMat);
-    makeSolidBox(12, 0.4, 6, 12, 0.0, 15, Assets.woodMat);
-    // Upstairs Floor: Y = 6.0
-    makeSolidBox(36, 0.4, 20, 0, 6.0, -8, Assets.woodMat);
-    makeSolidBox(16, 0.4, 16, -10, 6.0, 10, Assets.woodMat);
-    makeSolidBox(10, 0.4, 16, 13, 6.0, 10, Assets.woodMat);
-    // Attic Floor: Y = 12.0
-    makeSolidBox(36, 0.4, 36, 0, 12.0, 0, Assets.woodMat);
+    // --- CONTINUOUS SOLID FLOORS (EXACT HEIGHT SURFACES: -6.0, 0.0, 6.0) ---
+    // Basement Floor: Surface is exactly Y = -6.0
+    makeSolidBox(36, 0.4, 36, 0, -6.2, 0, Assets.concreteMat);
 
-    // Perimeter Exterior Enclosing Walls
+    // Ground Floor: Surface is exactly Y = 0.0 (Seamless cutouts for stairs)
+    makeSolidBox(24, 0.4, 36, -6, -0.2, 0, Assets.woodMat);
+    makeSolidBox(12, 0.4, 20, 12, -0.2, -8, Assets.woodMat);
+    makeSolidBox(12, 0.4, 7, 12, -0.2, 14.5, Assets.woodMat);
+
+    // Upstairs Floor: Surface is exactly Y = 6.0
+    makeSolidBox(36, 0.4, 20, 0, 5.8, -8, Assets.woodMat);
+    makeSolidBox(16, 0.4, 16, -10, 5.8, 10, Assets.woodMat);
+    makeSolidBox(10, 0.4, 16, 13, 5.8, 10, Assets.woodMat);
+
+    // Attic Floor: Surface is exactly Y = 11.5
+    makeSolidBox(36, 0.4, 36, 0, 11.3, 0, Assets.woodMat);
+
+    // Outer Perimeter Walls
     makeSolidBox(36, 24, 0.6, 0, 3.0, -18, Assets.wallMat);
     makeSolidBox(36, 24, 0.6, 0, 3.0, 18, Assets.wallMat);
     makeSolidBox(0.6, 24, 36, -18, 3.0, 0, Assets.wallMat);
     makeSolidBox(0.6, 24, 36, 18, 3.0, 0, Assets.wallMat);
 
-    // --- 2. STAIRCASES ---
-    // Ground Floor to Upstairs (Y: 0.0 -> 6.0)
+    // --- STAIRCASES WITH PRECISION ALIGNMENT ---
+    // Staircase 1: Ground Floor (0.0) up to Upstairs (6.0)
     const steps1 = 15;
     for (let i = 0; i < steps1; i++) {
-      const stepY = 0.2 + i * (5.8 / steps1);
+      const stepH = 0.4;
+      const stepTop = (i + 1) * (6.0 / steps1);
       const stepZ = 13.5 - i * 0.7;
-      makeSolidBox(3.4, 0.44, 0.78, 5.0, stepY, stepZ, Assets.woodMat);
-    }
-    // Ground Floor down to Basement (Y: 0.0 -> -6.0)
-    const steps2 = 15;
-    for (let i = 0; i < steps2; i++) {
-      const stepY = -0.2 - i * (5.8 / steps2);
-      const stepZ = -2.0 - i * 0.75;
-      makeSolidBox(3.2, 0.44, 0.78, -5.0, stepY, stepZ, Assets.concreteMat);
+      makeSolidBox(3.4, stepH, 0.78, 5.0, stepTop - stepH / 2, stepZ, Assets.woodMat);
     }
 
-    // --- 3. UPSTAIRS: STARTING BEDROOM & INTERIOR WALLS ---
-    // South Wall with Fitted Doorway
+    // Staircase 2: Ground Floor (0.0) down to Basement (-6.0)
+    const steps2 = 15;
+    for (let i = 0; i < steps2; i++) {
+      const stepH = 0.4;
+      const stepTop = -i * (6.0 / steps2);
+      const stepZ = -2.0 - i * 0.75;
+      makeSolidBox(3.2, stepH, 0.78, -5.0, stepTop - stepH / 2, stepZ, Assets.concreteMat);
+    }
+
+    // --- UPSTAIRS: STARTING BEDROOM & INTERIOR WALLS ---
+    // Wall with Door into Hallway
     this.buildWallWithDoor(scene, -8, 8.8, 2, 14, 5.6, 2.4, 4.4, 'x', {
       doorAngle: 0,
       openAngle: -Math.PI * 0.5,
       hingeLeft: true,
-      doorName: 'Starting Bedroom Door'
+      doorName: 'Bedroom Door'
     });
-    // East Partition Wall between Starting Bedroom & Bedroom 1
+    // Partition Wall between Bedrooms
     makeSolidBox(0.4, 5.6, 16, -1, 8.8, 10, Assets.wallMat);
 
-    // THE STARTING BED (Elevated Frame + Under-Bed Hiding Spot)
+    // STARTING BED (Resting on floor at Y = 6.0, mattress top at Y = 7.15)
     const bedGroup = new THREE.Group();
     const legGeo = new THREE.BoxGeometry(0.18, 0.8, 0.18);
-    const leg1 = new THREE.Mesh(legGeo, Assets.woodMat); leg1.position.set(-1.6, 0.4, -2.4); bedGroup.add(leg1);
-    const leg2 = new THREE.Mesh(legGeo, Assets.woodMat); leg2.position.set(1.6, 0.4, -2.4); bedGroup.add(leg2);
-    const leg3 = new THREE.Mesh(legGeo, Assets.woodMat); leg3.position.set(-1.6, 0.4, 2.4); bedGroup.add(leg3);
-    const leg4 = new THREE.Mesh(legGeo, Assets.woodMat); leg4.position.set(1.6, 0.4, 2.4); bedGroup.add(leg4);
+    const l1 = new THREE.Mesh(legGeo, Assets.woodMat); l1.position.set(-1.6, 0.4, -2.4); bedGroup.add(l1);
+    const l2 = new THREE.Mesh(legGeo, Assets.woodMat); l2.position.set(1.6, 0.4, -2.4); bedGroup.add(l2);
+    const l3 = new THREE.Mesh(legGeo, Assets.woodMat); l3.position.set(-1.6, 0.4, 2.4); bedGroup.add(l3);
+    const l4 = new THREE.Mesh(legGeo, Assets.woodMat); l4.position.set(1.6, 0.4, 2.4); bedGroup.add(l4);
 
     const mattress = new THREE.Mesh(new THREE.BoxGeometry(3.5, 0.55, 5.1), Assets.blanketMat);
     mattress.position.y = 1.05;
@@ -178,7 +179,7 @@ const House = {
     bedGroup.position.set(-9.0, 6.0, 9.5);
     scene.add(bedGroup);
 
-    // Bed Collider
+    // Top mattress collider only (keeps underside clear for hiding)
     CollisionWorld.addBox(-10.8, 6.6, 7.0, -7.2, 8.0, 12.1);
 
     this.hidingSpots.push({
@@ -188,7 +189,7 @@ const House = {
       type: 'bed'
     });
 
-    // STARTING BEDROOM TIPPABLE TABLE + FRAGILE VASE
+    // Tippable bedside table + fragile vase
     this.buildTippableTable(scene, -4.5, 6.0, 8.5);
 
     // Dresser with sliding drawers
@@ -197,7 +198,7 @@ const House = {
     // Wardrobe closet
     this.buildWardrobeCloset(scene, -13.5, 6.0, 5.0);
 
-    // --- 4. HIDDEN PAINTING & SECRET ROOM ---
+    // --- HIDDEN PAINTING PASSAGEWAY ---
     const painting = new THREE.Mesh(new THREE.BoxGeometry(2.4, 2.6, 0.15), Assets.woodMat);
     painting.position.set(4.0, 8.8, -7.8);
     scene.add(painting);
@@ -214,7 +215,7 @@ const House = {
       }
     });
 
-    // --- 5. GROUND FLOOR: FOYER & 4-TIER FRONT EXIT DOOR ---
+    // --- GROUND FLOOR: FOYER & 4-TIER FRONT EXIT DOOR ---
     const frontDoor = new THREE.Mesh(new THREE.BoxGeometry(3.2, 4.8, 0.28), Assets.woodMat);
     frontDoor.position.set(0, 2.4, 17.6);
     scene.add(frontDoor);
@@ -267,14 +268,14 @@ const House = {
             this.locks.master = false;
             CollisionWorld.removeBox(doorCollider);
             triggerVictory('Escaped through the Front Door of the Manor!');
-            return 'Turned Master Key! You are free!';
+            return 'Turned Master Key! You pushed the door open to freedom!';
           }
           return 'Master deadbolt is locked. Needs Master Key.';
         }
       }
     });
 
-    // --- 6. BASEMENT GARAGE & ESCAPE VEHICLE ---
+    // --- BASEMENT GARAGE & ESCAPE CAR ---
     const car = new THREE.Group();
     const carBody = new THREE.Mesh(new THREE.BoxGeometry(4.6, 1.8, 8.2), new THREE.MeshStandardMaterial({ color: 0x223344, roughness: 0.4 }));
     carBody.position.y = 1.0;
@@ -342,11 +343,11 @@ const House = {
       }
     });
 
-    // --- 7. SPAWN ITEMS WITH REAL PHYSICS (PUSHABLE/KICKABLE) ---
+    // --- SPAWN DYNAMIC PUSHABLE/KICKABLE ITEMS ---
     this.spawnPhysicsItem(scene, 'Hammer', new THREE.Vector3(8.0, 0.3, -8.0), 0.3);
     this.spawnPhysicsItem(scene, 'Padlock Key', new THREE.Vector3(-3.0, 6.9, 4.0), 0.15);
     this.spawnPhysicsItem(scene, 'Keycard', new THREE.Vector3(-11.0, -5.7, 8.0), 0.15);
-    this.spawnPhysicsItem(scene, 'Master Key', new THREE.Vector3(8.0, 12.3, 6.0), 0.15);
+    this.spawnPhysicsItem(scene, 'Master Key', new THREE.Vector3(8.0, 11.8, 6.0), 0.15);
     this.spawnPhysicsItem(scene, 'Spark Plug', new THREE.Vector3(-6.0, 6.3, -1.0), 0.2);
     this.spawnPhysicsItem(scene, 'Car Battery', new THREE.Vector3(12.0, -5.7, -9.0), 0.4);
     this.spawnPhysicsItem(scene, 'Gasoline Can', new THREE.Vector3(10.0, -5.7, -5.0), 0.35);
@@ -355,7 +356,6 @@ const House = {
     this.spawnPhysicsItem(scene, 'Shotgun', new THREE.Vector3(-12.0, 0.3, -6.0), 0.45);
   },
 
-  // TIPPABLE SMALL TABLE WITH FRAGILE VASE (KNOCK-OVER MECHANIC)
   buildTippableTable(scene, x, y, z) {
     const tableGroup = new THREE.Group();
 
@@ -369,7 +369,6 @@ const House = {
     const l3 = new THREE.Mesh(legGeo, Assets.woodMat); l3.position.set(0.55, 0.67, -0.55); tableGroup.add(l3);
     const l4 = new THREE.Mesh(legGeo, Assets.woodMat); l4.position.set(-0.55, 0.67, -0.55); tableGroup.add(l4);
 
-    // Fragile Vase on Table
     const vase = new THREE.Mesh(new THREE.CylinderGeometry(0.12, 0.2, 0.5, 10), Assets.skinMat);
     vase.position.set(0, 1.66, 0);
     tableGroup.add(vase);
@@ -391,7 +390,6 @@ const House = {
     this.dynamicProps.push(prop);
   },
 
-  // WALLS WITH DOORS & SMOOTH ROTATION
   buildWallWithDoor(scene, cx, cy, cz, totalW, totalH, doorW, doorH, axis, opts = {}) {
     const wallThick = 0.4;
     const sideW = (totalW - doorW) / 2;
@@ -528,7 +526,6 @@ const House = {
     });
   },
 
-  // DYNAMIC ITEMS WITH VELOCITY & KICK PHYSICS
   spawnPhysicsItem(scene, name, pos, radius = 0.25) {
     const group = new THREE.Group();
     let mesh;
