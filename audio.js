@@ -1,5 +1,5 @@
 /* =========================================================================
-   DUAL-MODE AUDIO ENGINE: TUNG TUNG SAHUR SYNTHESIS + LOCAL FILE BACKUP
+   AUDIO.JS - CUSTOM AUDIO LOADER (SILENT BY DEFAULT UNTIL FILES ADDED)
    ========================================================================= */
 class DualAudioEngine {
   constructor() {
@@ -10,7 +10,7 @@ class DualAudioEngine {
     this.sfxGain = null;
     this.musicGain = null;
 
-    // Relative paths in your GitHub repository
+    // Relative audio paths in your GitHub repository
     this.soundFiles = {
       chase: 'audio/sahur_chase.mp3',
       tung: 'audio/tung.mp3',
@@ -62,92 +62,48 @@ class DualAudioEngine {
         if (res.ok) {
           const arr = await res.arrayBuffer();
           this.loadedBuffers[key] = await this.ctx.decodeAudioData(arr);
-          console.log(`[Audio Engine] Custom audio file found: ${path}`);
+          console.log(`[Audio Engine] Custom audio file found & loaded: ${path}`);
         }
       } catch (e) {
-        // Procedural synthesis will handle missing files automatically
+        // Missing audio will remain silent
       }
     }
   }
 
-  playFileOrSynth(key, targetNode, synthCallback) {
+  playFile(key, targetNode) {
     this.init();
     if (this.loadedBuffers[key]) {
       const src = this.ctx.createBufferSource();
       src.buffer = this.loadedBuffers[key];
       src.connect(targetNode || this.sfxGain);
       src.start(0);
-    } else {
-      synthCallback();
     }
   }
 
-  playTung(volMultiplier = 1.0) {
-    this.playFileOrSynth('tung', this.musicGain, () => {
-      const now = this.ctx.currentTime;
-      const osc = this.ctx.createOscillator();
-      const gain = this.ctx.createGain();
-      const filter = this.ctx.createBiquadFilter();
-
-      osc.type = 'triangle';
-      osc.frequency.setValueAtTime(360, now);
-      osc.frequency.exponentialRampToValueAtTime(110, now + 0.28);
-
-      filter.type = 'bandpass';
-      filter.frequency.setValueAtTime(320, now);
-      filter.Q.setValueAtTime(4.0, now);
-
-      gain.gain.setValueAtTime(0.9 * volMultiplier, now);
-      gain.gain.exponentialRampToValueAtTime(0.001, now + 0.28);
-
-      osc.connect(filter);
-      filter.connect(gain);
-      gain.connect(this.musicGain);
-
-      osc.start(now);
-      osc.stop(now + 0.28);
-    });
+  playTung() {
+    this.playFile('tung', this.musicGain);
   }
 
-  playSahurChant(volMultiplier = 1.0) {
-    this.playFileOrSynth('sahur', this.musicGain, () => {
-      const now = this.ctx.currentTime;
-      const buf = this.ctx.createBuffer(1, this.ctx.sampleRate * 0.35, this.ctx.sampleRate);
-      const d = buf.getChannelData(0);
-      for (let i = 0; i < d.length; i++) {
-        d[i] = (Math.random() * 2 - 1) * Math.exp(-i / (d.length * 0.5));
-      }
-      const src = this.ctx.createBufferSource();
-      src.buffer = buf;
-
-      const filter = this.ctx.createBiquadFilter();
-      filter.type = 'bandpass';
-      filter.frequency.setValueAtTime(800, now);
-      filter.Q.setValueAtTime(4.0, now);
-
-      const gain = this.ctx.createGain();
-      gain.gain.setValueAtTime(0.75 * volMultiplier, now);
-      gain.gain.exponentialRampToValueAtTime(0.001, now + 0.35);
-
-      src.connect(filter);
-      filter.connect(gain);
-      gain.connect(this.musicGain);
-      src.start(now);
-    });
+  playSahurChant() {
+    this.playFile('sahur', this.musicGain);
   }
 
   triggerTungSahurPattern() {
-    this.playTung(1.0);
-    setTimeout(() => this.playTung(1.0), 220);
-    setTimeout(() => this.playTung(1.0), 440);
-    setTimeout(() => this.playTung(1.2), 660);
-    setTimeout(() => this.playSahurChant(1.1), 850);
+    this.playTung();
+    setTimeout(() => this.playTung(), 240);
+    setTimeout(() => this.playTung(), 480);
+    setTimeout(() => this.playSahurChant(), 750);
   }
 
   startChase() {
     if (this.chaseTimer) return;
+    this.playFile('chase', this.musicGain);
     this.triggerTungSahurPattern();
-    this.chaseTimer = setInterval(() => this.triggerTungSahurPattern(), 1400);
+    this.chaseTimer = setInterval(() => {
+      if (!this.loadedBuffers['chase']) {
+        this.triggerTungSahurPattern();
+      }
+    }, 1400);
   }
 
   stopChase() {
@@ -158,95 +114,31 @@ class DualAudioEngine {
   }
 
   playDoor() {
-    this.playFileOrSynth('door', this.sfxGain, () => this.playCreak(0.8));
+    this.playFile('door', this.sfxGain);
   }
 
   playDrawer() {
-    this.playFileOrSynth('drawer', this.sfxGain, () => {
-      const now = this.ctx.currentTime;
-      const osc = this.ctx.createOscillator();
-      const gain = this.ctx.createGain();
-      osc.type = 'triangle';
-      osc.frequency.setValueAtTime(140, now);
-      osc.frequency.linearRampToValueAtTime(90, now + 0.25);
-      gain.gain.setValueAtTime(0.3, now);
-      gain.gain.exponentialRampToValueAtTime(0.001, now + 0.25);
-      osc.connect(gain);
-      gain.connect(this.sfxGain);
-      osc.start(now);
-      osc.stop(now + 0.25);
-    });
+    this.playFile('drawer', this.sfxGain);
   }
 
-  playItemDrop(name, impactVelocity = 3.0) {
-    this.playFileOrSynth('drop', this.sfxGain, () => {
-      const intensity = Math.min(impactVelocity / 6, 1.2);
-      if (name && (name.includes('Key') || name.includes('Hammer') || name.includes('Shotgun'))) {
-        this.playTung(intensity);
-      } else {
-        this.playCreak(intensity);
-      }
-    });
+  playItemDrop(name) {
+    this.playFile('drop', this.sfxGain);
   }
 
-  playCreak(intensity = 1.0) {
-    this.playFileOrSynth('creak', this.sfxGain, () => {
-      const now = this.ctx.currentTime;
-      const osc = this.ctx.createOscillator();
-      const gain = this.ctx.createGain();
-      osc.type = 'sawtooth';
-      osc.frequency.setValueAtTime(95, now);
-      osc.frequency.linearRampToValueAtTime(145, now + 0.3);
-      gain.gain.setValueAtTime(0.15 * intensity, now);
-      gain.gain.exponentialRampToValueAtTime(0.001, now + 0.35);
-      osc.connect(gain);
-      gain.connect(this.sfxGain);
-      osc.start(now);
-      osc.stop(now + 0.35);
-    });
+  playCreak() {
+    this.playFile('creak', this.sfxGain);
   }
 
   playCrossbow() {
-    this.playFileOrSynth('crossbow', this.sfxGain, () => {
-      const now = this.ctx.currentTime;
-      const osc = this.ctx.createOscillator();
-      const gain = this.ctx.createGain();
-      osc.type = 'triangle';
-      osc.frequency.setValueAtTime(500, now);
-      osc.frequency.exponentialRampToValueAtTime(80, now + 0.12);
-      gain.gain.setValueAtTime(0.7, now);
-      gain.gain.exponentialRampToValueAtTime(0.01, now + 0.15);
-      osc.connect(gain);
-      gain.connect(this.sfxGain);
-      osc.start(now);
-      osc.stop(now + 0.15);
-    });
+    this.playFile('crossbow', this.sfxGain);
   }
 
   playShotgun() {
-    this.playFileOrSynth('shotgun', this.sfxGain, () => {
-      this.playTung(1.5);
-      this.playCreak(1.2);
-    });
+    this.playFile('shotgun', this.sfxGain);
   }
 
   playJumpscare() {
-    this.playFileOrSynth('jumpscare', this.sfxGain, () => {
-      const now = this.ctx.currentTime;
-      for (let i = 0; i < 4; i++) {
-        const osc = this.ctx.createOscillator();
-        const gain = this.ctx.createGain();
-        osc.type = 'sawtooth';
-        osc.frequency.setValueAtTime(160 + i * 110, now);
-        osc.frequency.linearRampToValueAtTime(80, now + 0.9);
-        gain.gain.setValueAtTime(0.35, now);
-        gain.gain.exponentialRampToValueAtTime(0.001, now + 1.0);
-        osc.connect(gain);
-        gain.connect(this.sfxGain);
-        osc.start(now);
-        osc.stop(now + 1.0);
-      }
-    });
+    this.playFile('jumpscare', this.sfxGain);
   }
 }
 const audio = new DualAudioEngine();
