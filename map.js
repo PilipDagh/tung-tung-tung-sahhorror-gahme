@@ -1,5 +1,5 @@
 /* =========================================================================
-   MAP.JS - PRECISE ARCHITECTURAL MANOR, ZERO-GAP FLOORS & DYNAMIC PROPS
+   MAP.JS - 1:1 MANOR BLUEPRINT, SEAMLESS FLOORS (NO GAPS), 3D DRAWERS & PROPS
    ========================================================================= */
 
 const Assets = {
@@ -17,7 +17,7 @@ const Assets = {
       const c = document.createElement('canvas'); c.width = 256; c.height = 256;
       const ctx = c.getContext('2d');
       ctx.fillStyle = '#2d1c12'; ctx.fillRect(0, 0, 256, 256);
-      ctx.strokeStyle = '#1a0f08';
+      ctx.strokeStyle = '#180f08';
       for (let i = 0; i < 32; i++) {
         ctx.lineWidth = 1 + Math.random() * 2;
         ctx.beginPath();
@@ -42,11 +42,8 @@ const Assets = {
       return new THREE.CanvasTexture(c);
     };
 
-    const woodTex = makeWoodTexture();
-    const wallTex = makeWallpaperTexture();
-
-    this.woodMat = new THREE.MeshStandardMaterial({ map: woodTex, roughness: 0.85 });
-    this.wallMat = new THREE.MeshStandardMaterial({ map: wallTex, roughness: 0.92 });
+    this.woodMat = new THREE.MeshStandardMaterial({ map: makeWoodTexture(), roughness: 0.85 });
+    this.wallMat = new THREE.MeshStandardMaterial({ map: makeWallpaperTexture(), roughness: 0.92 });
     this.concreteMat = new THREE.MeshStandardMaterial({ color: 0x2a2a2a, roughness: 0.95 });
     this.metalMat = new THREE.MeshStandardMaterial({ color: 0x888888, metalness: 0.8, roughness: 0.3 });
     this.skinMat = new THREE.MeshStandardMaterial({ color: 0xb5a088, roughness: 0.8 });
@@ -59,19 +56,25 @@ Assets.init();
 
 const CollisionWorld = {
   boxes: [],
+  wallsAndDoors: [],
 
-  addBox(minX, minY, minZ, maxX, maxY, maxZ) {
+  addBox(minX, minY, minZ, maxX, maxY, maxZ, isWall = false) {
     const box = new THREE.Box3(
       new THREE.Vector3(Math.min(minX, maxX), Math.min(minY, maxY), Math.min(minZ, maxZ)),
       new THREE.Vector3(Math.max(minX, maxX), Math.max(minY, maxY), Math.max(minZ, maxZ))
     );
     this.boxes.push(box);
+    if (isWall) {
+      this.wallsAndDoors.push(box);
+    }
     return box;
   },
 
   removeBox(box) {
     const idx = this.boxes.indexOf(box);
     if (idx !== -1) this.boxes.splice(idx, 1);
+    const wIdx = this.wallsAndDoors.indexOf(box);
+    if (wIdx !== -1) this.wallsAndDoors.splice(wIdx, 1);
   }
 };
 
@@ -94,46 +97,56 @@ const House = {
   },
 
   build(scene) {
-    const makeSolidBox = (w, h, d, x, y, z, mat) => {
+    const makeSolidBox = (w, h, d, x, y, z, mat, isWall = false) => {
       const mesh = new THREE.Mesh(new THREE.BoxGeometry(w, h, d), mat);
       mesh.position.set(x, y, z);
       mesh.receiveShadow = true;
       scene.add(mesh);
-      CollisionWorld.addBox(x - w / 2, y - h / 2, z - d / 2, x + w / 2, y + h / 2, z + d / 2);
+      CollisionWorld.addBox(x - w / 2, y - h / 2, z - d / 2, x + w / 2, y + h / 2, z + d / 2, isWall);
       return mesh;
     };
 
-    // --- CONTINUOUS SOLID FLOORS (EXACT HEIGHT SURFACES: -6.0, 0.0, 6.0) ---
+    // --- 1. CONTINUOUS SOLID FLOORS (ZERO GAPS / ZERO HOLES) ---
     // Basement Floor: Surface is exactly Y = -6.0
     makeSolidBox(36, 0.4, 36, 0, -6.2, 0, Assets.concreteMat);
 
-    // Ground Floor: Surface is exactly Y = 0.0 (Seamless cutouts for stairs)
-    makeSolidBox(24, 0.4, 36, -6, -0.2, 0, Assets.woodMat);
-    makeSolidBox(12, 0.4, 20, 12, -0.2, -8, Assets.woodMat);
-    makeSolidBox(12, 0.4, 7, 12, -0.2, 14.5, Assets.woodMat);
+    // Ground Floor: Surface is exactly Y = 0.0 (Seamless surrounding stairwell cutouts)
+    // Left side & Foyer
+    makeSolidBox(21.2, 0.4, 36, -7.4, -0.2, 0, Assets.woodMat);
+    // Right side
+    makeSolidBox(11.2, 0.4, 36, 12.4, -0.2, 0, Assets.woodMat);
+    // Ground Back (Behind stairs)
+    makeSolidBox(3.6, 0.4, 21.8, 5.0, -0.2, -7.1, Assets.woodMat);
+    // Ground Front landing
+    makeSolidBox(3.6, 0.4, 4.0, 5.0, -0.2, 16.0, Assets.woodMat);
 
-    // Upstairs Floor: Surface is exactly Y = 6.0
-    makeSolidBox(36, 0.4, 20, 0, 5.8, -8, Assets.woodMat);
-    makeSolidBox(16, 0.4, 16, -10, 5.8, 10, Assets.woodMat);
-    makeSolidBox(10, 0.4, 16, 13, 5.8, 10, Assets.woodMat);
+    // Upstairs Floor: Surface is exactly Y = 6.0 (Continuous with only the stairwell opening)
+    // Left side (Entire Starting Bedroom, Bedroom 1, Hallway left)
+    makeSolidBox(21.2, 0.4, 36, -7.4, 5.8, 0, Assets.woodMat);
+    // Right side (Bathroom, Hallway right)
+    makeSolidBox(11.2, 0.4, 36, 12.4, 5.8, 0, Assets.woodMat);
+    // Upstairs Back corridor
+    makeSolidBox(3.6, 0.4, 21.8, 5.0, 5.8, -7.1, Assets.woodMat);
+    // Upstairs Front landing walkway
+    makeSolidBox(3.6, 0.4, 4.0, 5.0, 5.8, 16.0, Assets.woodMat);
 
     // Attic Floor: Surface is exactly Y = 11.5
     makeSolidBox(36, 0.4, 36, 0, 11.3, 0, Assets.woodMat);
 
-    // Outer Perimeter Walls
-    makeSolidBox(36, 24, 0.6, 0, 3.0, -18, Assets.wallMat);
-    makeSolidBox(36, 24, 0.6, 0, 3.0, 18, Assets.wallMat);
-    makeSolidBox(0.6, 24, 36, -18, 3.0, 0, Assets.wallMat);
-    makeSolidBox(0.6, 24, 36, 18, 3.0, 0, Assets.wallMat);
+    // Perimeter Exterior Walls
+    makeSolidBox(36, 24, 0.6, 0, 3.0, -18, Assets.wallMat, true);
+    makeSolidBox(36, 24, 0.6, 0, 3.0, 18, Assets.wallMat, true);
+    makeSolidBox(0.6, 24, 36, -18, 3.0, 0, Assets.wallMat, true);
+    makeSolidBox(0.6, 24, 36, 18, 3.0, 0, Assets.wallMat, true);
 
-    // --- STAIRCASES WITH PRECISION ALIGNMENT ---
+    // --- 2. ACCURATE STAIRCASES (NO GAPS TO SURROUNDING FLOORS) ---
     // Staircase 1: Ground Floor (0.0) up to Upstairs (6.0)
     const steps1 = 15;
     for (let i = 0; i < steps1; i++) {
       const stepH = 0.4;
       const stepTop = (i + 1) * (6.0 / steps1);
-      const stepZ = 13.5 - i * 0.7;
-      makeSolidBox(3.4, stepH, 0.78, 5.0, stepTop - stepH / 2, stepZ, Assets.woodMat);
+      const stepZ = 13.5 - i * 0.68;
+      makeSolidBox(3.4, stepH, 0.75, 5.0, stepTop - stepH / 2, stepZ, Assets.woodMat);
     }
 
     // Staircase 2: Ground Floor (0.0) down to Basement (-6.0)
@@ -145,7 +158,7 @@ const House = {
       makeSolidBox(3.2, stepH, 0.78, -5.0, stepTop - stepH / 2, stepZ, Assets.concreteMat);
     }
 
-    // --- UPSTAIRS: STARTING BEDROOM & INTERIOR WALLS ---
+    // --- 3. UPSTAIRS: STARTING BEDROOM ---
     // Wall with Door into Hallway
     this.buildWallWithDoor(scene, -8, 8.8, 2, 14, 5.6, 2.4, 4.4, 'x', {
       doorAngle: 0,
@@ -154,9 +167,9 @@ const House = {
       doorName: 'Bedroom Door'
     });
     // Partition Wall between Bedrooms
-    makeSolidBox(0.4, 5.6, 16, -1, 8.8, 10, Assets.wallMat);
+    makeSolidBox(0.4, 5.6, 16, -1, 8.8, 10, Assets.wallMat, true);
 
-    // STARTING BED (Resting on floor at Y = 6.0, mattress top at Y = 7.15)
+    // STARTING BED (Hollow underside for hiding)
     const bedGroup = new THREE.Group();
     const legGeo = new THREE.BoxGeometry(0.18, 0.8, 0.18);
     const l1 = new THREE.Mesh(legGeo, Assets.woodMat); l1.position.set(-1.6, 0.4, -2.4); bedGroup.add(l1);
@@ -179,8 +192,8 @@ const House = {
     bedGroup.position.set(-9.0, 6.0, 9.5);
     scene.add(bedGroup);
 
-    // Top mattress collider only (keeps underside clear for hiding)
-    CollisionWorld.addBox(-10.8, 6.6, 7.0, -7.2, 8.0, 12.1);
+    // Bed top mattress collider only
+    CollisionWorld.addBox(-10.8, 6.6, 7.0, -7.2, 8.0, 12.1, true);
 
     this.hidingSpots.push({
       id: 'starting-bed',
@@ -189,16 +202,16 @@ const House = {
       type: 'bed'
     });
 
-    // Tippable bedside table + fragile vase
+    // STARTING ROOM TIPPABLE TABLE + FRAGILE VASE (DETAILED MODEL)
     this.buildTippableTable(scene, -4.5, 6.0, 8.5);
 
-    // Dresser with sliding drawers
-    this.buildDresserWithDrawers(scene, -3.0, 6.0, 4.0, 2, 'z');
+    // DRESSER WITH 3D CAVITY DRAWERS THAT HOLD ITEMS
+    this.buildDresserWithRealDrawers(scene, -3.2, 6.0, 3.8);
 
     // Wardrobe closet
     this.buildWardrobeCloset(scene, -13.5, 6.0, 5.0);
 
-    // --- HIDDEN PAINTING PASSAGEWAY ---
+    // --- 4. HIDDEN PAINTING & SECRET AREA ---
     const painting = new THREE.Mesh(new THREE.BoxGeometry(2.4, 2.6, 0.15), Assets.woodMat);
     painting.position.set(4.0, 8.8, -7.8);
     scene.add(painting);
@@ -215,11 +228,11 @@ const House = {
       }
     });
 
-    // --- GROUND FLOOR: FOYER & 4-TIER FRONT EXIT DOOR ---
+    // --- 5. GROUND FLOOR: FOYER & 4-TIER FRONT EXIT DOOR ---
     const frontDoor = new THREE.Mesh(new THREE.BoxGeometry(3.2, 4.8, 0.28), Assets.woodMat);
     frontDoor.position.set(0, 2.4, 17.6);
     scene.add(frontDoor);
-    const doorCollider = CollisionWorld.addBox(-1.6, 0.0, 17.3, 1.6, 4.8, 17.9);
+    const doorCollider = CollisionWorld.addBox(-1.6, 0.0, 17.3, 1.6, 4.8, 17.9, true);
 
     const plank1 = new THREE.Mesh(new THREE.BoxGeometry(3.6, 0.38, 0.18), Assets.woodMat);
     plank1.position.set(0, 2.9, 17.3);
@@ -268,14 +281,14 @@ const House = {
             this.locks.master = false;
             CollisionWorld.removeBox(doorCollider);
             triggerVictory('Escaped through the Front Door of the Manor!');
-            return 'Turned Master Key! You pushed the door open to freedom!';
+            return 'Turned Master Key! You are free!';
           }
           return 'Master deadbolt is locked. Needs Master Key.';
         }
       }
     });
 
-    // --- BASEMENT GARAGE & ESCAPE CAR ---
+    // --- 6. BASEMENT GARAGE & ESCAPE VEHICLE ---
     const car = new THREE.Group();
     const carBody = new THREE.Mesh(new THREE.BoxGeometry(4.6, 1.8, 8.2), new THREE.MeshStandardMaterial({ color: 0x223344, roughness: 0.4 }));
     carBody.position.y = 1.0;
@@ -287,7 +300,7 @@ const House = {
 
     car.position.set(-7.0, -6.0, -6.0);
     scene.add(car);
-    CollisionWorld.addBox(-9.5, -6.0, -10.5, -4.5, -4.0, -1.5);
+    CollisionWorld.addBox(-9.5, -6.0, -10.5, -4.5, -4.0, -1.5, true);
 
     let hoodOpen = false;
     this.interactables.push({
@@ -343,9 +356,8 @@ const House = {
       }
     });
 
-    // --- SPAWN DYNAMIC PUSHABLE/KICKABLE ITEMS ---
+    // --- 7. SPAWN ITEMS (ONE KEY IS STORED INSIDE THE DRESSER DRAWER) ---
     this.spawnPhysicsItem(scene, 'Hammer', new THREE.Vector3(8.0, 0.3, -8.0), 0.3);
-    this.spawnPhysicsItem(scene, 'Padlock Key', new THREE.Vector3(-3.0, 6.9, 4.0), 0.15);
     this.spawnPhysicsItem(scene, 'Keycard', new THREE.Vector3(-11.0, -5.7, 8.0), 0.15);
     this.spawnPhysicsItem(scene, 'Master Key', new THREE.Vector3(8.0, 11.8, 6.0), 0.15);
     this.spawnPhysicsItem(scene, 'Spark Plug', new THREE.Vector3(-6.0, 6.3, -1.0), 0.2);
@@ -356,21 +368,30 @@ const House = {
     this.spawnPhysicsItem(scene, 'Shotgun', new THREE.Vector3(-12.0, 0.3, -6.0), 0.45);
   },
 
+  // TIPPABLE BEDSIDE TABLE WITH CROSS BRACES & AN ANTIQUE CRACKED VASE
   buildTippableTable(scene, x, y, z) {
     const tableGroup = new THREE.Group();
 
-    const top = new THREE.Mesh(new THREE.BoxGeometry(1.4, 0.12, 1.4), Assets.woodMat);
+    // Tabletop with bevel
+    const top = new THREE.Mesh(new THREE.BoxGeometry(1.3, 0.1, 1.3), Assets.woodMat);
     top.position.y = 1.35;
     tableGroup.add(top);
 
-    const legGeo = new THREE.CylinderGeometry(0.05, 0.05, 1.35, 8);
-    const l1 = new THREE.Mesh(legGeo, Assets.woodMat); l1.position.set(0.55, 0.67, 0.55); tableGroup.add(l1);
-    const l2 = new THREE.Mesh(legGeo, Assets.woodMat); l2.position.set(-0.55, 0.67, 0.55); tableGroup.add(l2);
-    const l3 = new THREE.Mesh(legGeo, Assets.woodMat); l3.position.set(0.55, 0.67, -0.55); tableGroup.add(l3);
-    const l4 = new THREE.Mesh(legGeo, Assets.woodMat); l4.position.set(-0.55, 0.67, -0.55); tableGroup.add(l4);
+    // Turned wooden legs
+    const legGeo = new THREE.CylinderGeometry(0.045, 0.045, 1.35, 8);
+    const l1 = new THREE.Mesh(legGeo, Assets.woodMat); l1.position.set(0.5, 0.67, 0.5); tableGroup.add(l1);
+    const l2 = new THREE.Mesh(legGeo, Assets.woodMat); l2.position.set(-0.5, 0.67, 0.5); tableGroup.add(l2);
+    const l3 = new THREE.Mesh(legGeo, Assets.woodMat); l3.position.set(0.5, 0.67, -0.5); tableGroup.add(l3);
+    const l4 = new THREE.Mesh(legGeo, Assets.woodMat); l4.position.set(-0.5, 0.67, -0.5); tableGroup.add(l4);
 
-    const vase = new THREE.Mesh(new THREE.CylinderGeometry(0.12, 0.2, 0.5, 10), Assets.skinMat);
-    vase.position.set(0, 1.66, 0);
+    // Lower storage shelf board
+    const shelf = new THREE.Mesh(new THREE.BoxGeometry(1.1, 0.05, 1.1), Assets.woodMat);
+    shelf.position.y = 0.35;
+    tableGroup.add(shelf);
+
+    // Fragile Porcelain Vase
+    const vase = new THREE.Mesh(new THREE.CylinderGeometry(0.12, 0.18, 0.48, 10), Assets.skinMat);
+    vase.position.set(0, 1.64, 0);
     tableGroup.add(vase);
 
     tableGroup.position.set(x, y, z);
@@ -383,11 +404,103 @@ const House = {
       isTipped: false,
       velocity: new THREE.Vector3(),
       rotVel: 0,
-      radius: 0.75,
+      radius: 0.7,
       height: 1.45,
       yPos: y
     };
     this.dynamicProps.push(prop);
+  },
+
+  // DRESSER WITH 3D HOLLOW CAVITY DRAWERS (CAN STORE AND CARRY ITEMS)
+  buildDresserWithRealDrawers(scene, x, y, z) {
+    const dresserW = 2.0, dresserH = 2.4, dresserD = 1.4;
+    const body = new THREE.Mesh(new THREE.BoxGeometry(dresserW, dresserH, dresserD), Assets.woodMat);
+    body.position.set(x, y + dresserH / 2, z);
+    scene.add(body);
+    CollisionWorld.addBox(x - dresserW / 2, y, z - dresserD / 2, x + dresserW / 2, y + dresserH, z + dresserD / 2, true);
+
+    const drawerCount = 2;
+    for (let i = 0; i < drawerCount; i++) {
+      const drawerGroup = new THREE.Group();
+      const dW = dresserW - 0.25;
+      const dH = (dresserH - 0.4) / drawerCount - 0.1;
+      const dD = dresserD - 0.2;
+      const dY = y + 0.35 + i * (dH + 0.18);
+
+      // 1. Bottom tray plate
+      const btm = new THREE.Mesh(new THREE.BoxGeometry(dW, 0.04, dD), Assets.frameMat);
+      btm.position.set(0, 0.02, -dD / 2);
+      drawerGroup.add(btm);
+
+      // 2. Front face
+      const front = new THREE.Mesh(new THREE.BoxGeometry(dW + 0.05, dH, 0.08), Assets.frameMat);
+      front.position.set(0, dH / 2, 0);
+      drawerGroup.add(front);
+
+      // 3. Brass handle
+      const handle = new THREE.Mesh(new THREE.BoxGeometry(0.35, 0.06, 0.08), Assets.metalMat);
+      handle.position.set(0, dH / 2, 0.07);
+      drawerGroup.add(handle);
+
+      // 4. Side & back walls of tray
+      const sideLeft = new THREE.Mesh(new THREE.BoxGeometry(0.04, dH - 0.08, dD), Assets.frameMat);
+      sideLeft.position.set(-dW / 2 + 0.02, dH / 2 - 0.04, -dD / 2);
+      drawerGroup.add(sideLeft);
+
+      const sideRight = sideLeft.clone();
+      sideRight.position.x = dW / 2 - 0.02;
+      drawerGroup.add(sideRight);
+
+      const back = new THREE.Mesh(new THREE.BoxGeometry(dW, dH - 0.08, 0.04), Assets.frameMat);
+      back.position.set(0, dH / 2 - 0.04, -dD);
+      drawerGroup.add(back);
+
+      drawerGroup.position.set(x, dY, z + dresserD / 2);
+      scene.add(drawerGroup);
+
+      // Put the Padlock Key inside the Top Drawer!
+      if (i === 1) {
+        const keyItem = this.spawnPhysicsItem(scene, 'Padlock Key', new THREE.Vector3(0, 0.08, -dD / 2), 0.15);
+        drawerGroup.add(keyItem.group);
+        keyItem.group.position.set(0, 0.08, -dD / 2);
+      }
+
+      const drawerObj = {
+        group: drawerGroup,
+        isOpen: false,
+        currentZ: z + dresserD / 2,
+        targetZ: z + dresserD / 2,
+        closedZ: z + dresserD / 2,
+        openZ: z + dresserD / 2 + 0.8
+      };
+      this.drawers.push(drawerObj);
+
+      this.interactables.push({
+        mesh: front,
+        prompt: '[E] Drawer',
+        action: () => {
+          drawerObj.isOpen = !drawerObj.isOpen;
+          drawerObj.targetZ = drawerObj.isOpen ? drawerObj.openZ : drawerObj.closedZ;
+          audio.playDrawer();
+          return drawerObj.isOpen ? 'Opened Drawer.' : 'Closed Drawer.';
+        }
+      });
+    }
+  },
+
+  buildWardrobeCloset(scene, x, y, z) {
+    const wW = 2.4, wH = 4.6, wD = 1.6;
+    const wardrobeFrame = new THREE.Mesh(new THREE.BoxGeometry(wW, wH, wD), Assets.woodMat);
+    wardrobeFrame.position.set(x, y + wH / 2, z);
+    scene.add(wardrobeFrame);
+    CollisionWorld.addBox(x - wW / 2, y, z - wD / 2, x + wW / 2, y + wH, z + wD / 2, true);
+
+    this.hidingSpots.push({
+      id: 'bedroom-closet',
+      position: new THREE.Vector3(x, y + 1.2, z + 0.1),
+      emergePosition: new THREE.Vector3(x + 1.8, y, z),
+      type: 'wardrobe'
+    });
   },
 
   buildWallWithDoor(scene, cx, cy, cz, totalW, totalH, doorW, doorH, axis, opts = {}) {
@@ -399,19 +512,19 @@ const House = {
     const leftWall = new THREE.Mesh(new THREE.BoxGeometry(sideW, totalH, wallThick), Assets.wallMat);
     leftWall.position.set(leftX, cy, cz);
     scene.add(leftWall);
-    CollisionWorld.addBox(leftX - sideW / 2, cy - totalH / 2, cz - wallThick / 2, leftX + sideW / 2, cy + totalH / 2, cz + wallThick / 2);
+    CollisionWorld.addBox(leftX - sideW / 2, cy - totalH / 2, cz - wallThick / 2, leftX + sideW / 2, cy + totalH / 2, cz + wallThick / 2, true);
 
     const rightX = cx + totalW / 2 - sideW / 2;
     const rightWall = new THREE.Mesh(new THREE.BoxGeometry(sideW, totalH, wallThick), Assets.wallMat);
     rightWall.position.set(rightX, cy, cz);
     scene.add(rightWall);
-    CollisionWorld.addBox(rightX - sideW / 2, cy - totalH / 2, cz - wallThick / 2, rightX + sideW / 2, cy + totalH / 2, cz + wallThick / 2);
+    CollisionWorld.addBox(rightX - sideW / 2, cy - totalH / 2, cz - wallThick / 2, rightX + sideW / 2, cy + totalH / 2, cz + wallThick / 2, true);
 
     const headerY = cy + totalH / 2 - headerH / 2;
     const headerWall = new THREE.Mesh(new THREE.BoxGeometry(doorW, headerH, wallThick), Assets.wallMat);
     headerWall.position.set(cx, headerY, cz);
     scene.add(headerWall);
-    CollisionWorld.addBox(cx - doorW / 2, headerY - headerH / 2, cz - wallThick / 2, cx + doorW / 2, headerY + headerH / 2, cz + wallThick / 2);
+    CollisionWorld.addBox(cx - doorW / 2, headerY - headerH / 2, cz - wallThick / 2, cx + doorW / 2, headerY + headerH / 2, cz + wallThick / 2, true);
 
     const doorPivot = new THREE.Group();
     const hingeX = opts.hingeLeft ? (cx - doorW / 2) : (cx + doorW / 2);
@@ -430,7 +543,7 @@ const House = {
     const doorObj = {
       pivot: doorPivot,
       mesh: doorMesh,
-      collider: CollisionWorld.addBox(cx - doorW / 2, cy - totalH / 2, cz - 0.2, cx + doorW / 2, cy - totalH / 2 + doorH, cz + 0.2),
+      collider: CollisionWorld.addBox(cx - doorW / 2, cy - totalH / 2, cz - 0.2, cx + doorW / 2, cy - totalH / 2 + doorH, cz + 0.2, true),
       isOpen: false,
       currentAngle: 0,
       targetAngle: 0,
@@ -457,72 +570,13 @@ const House = {
           if (!doorObj.collider) {
             doorObj.collider = CollisionWorld.addBox(
               doorObj.boxCoords.minX, doorObj.boxCoords.minY, doorObj.boxCoords.minZ,
-              doorObj.boxCoords.maxX, doorObj.boxCoords.maxY, doorObj.boxCoords.maxZ
+              doorObj.boxCoords.maxX, doorObj.boxCoords.maxY, doorObj.boxCoords.maxZ,
+              true
             );
           }
         }
         return doorObj.isOpen ? 'Opened Door.' : 'Closed Door.';
       }
-    });
-  },
-
-  buildDresserWithDrawers(scene, x, y, z, drawerCount, axis) {
-    const dresserW = 2.0, dresserH = 2.4, dresserD = 1.4;
-    const body = new THREE.Mesh(new THREE.BoxGeometry(dresserW, dresserH, dresserD), Assets.woodMat);
-    body.position.set(x, y + dresserH / 2, z);
-    scene.add(body);
-    CollisionWorld.addBox(x - dresserW / 2, y, z - dresserD / 2, x + dresserW / 2, y + dresserH, z + dresserD / 2);
-
-    for (let i = 0; i < drawerCount; i++) {
-      const drawerGroup = new THREE.Group();
-      const dH = (dresserH - 0.4) / drawerCount;
-      const dY = y + 0.3 + i * (dH + 0.1);
-
-      const dFront = new THREE.Mesh(new THREE.BoxGeometry(dresserW - 0.2, dH - 0.08, 0.1), Assets.frameMat);
-      drawerGroup.add(dFront);
-
-      const handle = new THREE.Mesh(new THREE.BoxGeometry(0.35, 0.06, 0.08), Assets.metalMat);
-      handle.position.z = 0.08;
-      drawerGroup.add(handle);
-
-      drawerGroup.position.set(x, dY, z + dresserD / 2);
-      scene.add(drawerGroup);
-
-      const drawerObj = {
-        group: drawerGroup,
-        isOpen: false,
-        currentZ: z + dresserD / 2,
-        targetZ: z + dresserD / 2,
-        closedZ: z + dresserD / 2,
-        openZ: z + dresserD / 2 + 0.65
-      };
-      this.drawers.push(drawerObj);
-
-      this.interactables.push({
-        mesh: dFront,
-        prompt: '[E] Drawer',
-        action: () => {
-          drawerObj.isOpen = !drawerObj.isOpen;
-          drawerObj.targetZ = drawerObj.isOpen ? drawerObj.openZ : drawerObj.closedZ;
-          audio.playDrawer();
-          return drawerObj.isOpen ? 'Opened Drawer.' : 'Closed Drawer.';
-        }
-      });
-    }
-  },
-
-  buildWardrobeCloset(scene, x, y, z) {
-    const wW = 2.4, wH = 4.6, wD = 1.6;
-    const wardrobeFrame = new THREE.Mesh(new THREE.BoxGeometry(wW, wH, wD), Assets.woodMat);
-    wardrobeFrame.position.set(x, y + wH / 2, z);
-    scene.add(wardrobeFrame);
-    CollisionWorld.addBox(x - wW / 2, y, z - wD / 2, x + wW / 2, y + wH, z + wD / 2);
-
-    this.hidingSpots.push({
-      id: 'bedroom-closet',
-      position: new THREE.Vector3(x, y + 1.2, z + 0.1),
-      emergePosition: new THREE.Vector3(x + 1.8, y, z),
-      type: 'wardrobe'
     });
   },
 
@@ -555,7 +609,8 @@ const House = {
       radius,
       velocity: new THREE.Vector3(0, 0, 0),
       inInventory: false,
-      isGrounded: true
+      isGrounded: true,
+      lastPushTime: 0
     };
     this.physicsItems.push(record);
 
@@ -565,7 +620,7 @@ const House = {
       itemRecord: record,
       action: (inv) => {
         if (inv.add(record)) {
-          scene.remove(group);
+          if (group.parent) group.parent.remove(group);
           record.inInventory = true;
           return `Picked up ${name}.`;
         }
