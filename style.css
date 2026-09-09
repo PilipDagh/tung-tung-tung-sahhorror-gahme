@@ -16,11 +16,11 @@ html, body {
   width: 100%; height: 100%; position: absolute; top: 0; left: 0; z-index: 1;
 }
 
-/* DYNAMIC BLOOD VIGNETTE (THICKENS & REDDENS PER DAY) */
+/* DYNAMIC BLOOD VIGNETTE */
 #blood-vignette {
   position: absolute; top: 0; left: 0; width: 100%; height: 100%;
   pointer-events: none; z-index: 20;
-  background: radial-gradient(circle, transparent 70%, rgba(138, 3, 3, 0.4) 95%, rgba(64, 0, 0, 0.9) 100%);
+  background: radial-gradient(circle, transparent 65%, rgba(138, 3, 3, 0.5) 90%, rgba(64, 0, 0, 0.95) 100%);
   opacity: 0;
   transition: opacity 1.5s ease;
 }
@@ -38,18 +38,10 @@ html, body {
   background: #000; z-index: 45; display: none;
   flex-direction: column; align-items: center; justify-content: center;
 }
-.nap-box {
-  text-align: center; max-width: 500px; padding: 20px;
-}
-.nap-box h2 {
-  font-size: 32px; color: var(--blood-bright); letter-spacing: 4px;
-}
-.nap-box p {
-  color: #bbb; font-size: 15px; margin: 15px 0;
-}
-#gp-countdown-timer {
-  font-size: 64px; font-weight: bold; color: #fff; text-shadow: 0 0 20px var(--blood-bright);
-}
+.nap-box { text-align: center; max-width: 500px; padding: 20px; }
+.nap-box h2 { font-size: 32px; color: var(--blood-bright); letter-spacing: 4px; }
+.nap-box p { color: #bbb; font-size: 15px; margin: 15px 0; }
+#gp-countdown-timer { font-size: 64px; font-weight: bold; color: #fff; text-shadow: 0 0 20px var(--blood-bright); }
 
 /* GHOST SPECTATOR HUD */
 #ghost-indicator {
@@ -72,9 +64,7 @@ html, body {
   font-size: 24px; color: #fff; text-shadow: 0 0 12px var(--blood-bright);
   letter-spacing: 3px; animation: pulseFocus 1.4s infinite alternate; text-align: center;
 }
-#click-to-focus p {
-  color: #aaa; font-size: 13px; margin-top: 10px; letter-spacing: 1px;
-}
+#click-to-focus p { color: #aaa; font-size: 13px; margin-top: 10px; letter-spacing: 1px; }
 @keyframes pulseFocus { 0% { opacity: 0.5; } 100% { opacity: 1; } }
 
 /* CROSSHAIR RETICLES */
@@ -88,7 +78,7 @@ html, body {
 .reticle-ring { width: 22px; height: 22px; border: 2px solid rgba(255,255,255,0.6); border-radius: 50%; }
 .reticle-none { display: none; }
 
-/* IN-GAME HUD (SCALED BY UI SCALE SLIDER) */
+/* IN-GAME HUD (DYNAMICALLY SCALED) */
 #hud {
   position: absolute; top: 0; left: 0; width: 100%; height: 100%;
   pointer-events: none; z-index: 15; display: none;
@@ -161,7 +151,7 @@ html, body {
   z-index: 95; display: none; pointer-events: none;
 }
 
-/* MOBILE CONTROLS (SCALED BY UI SCALE SLIDER) */
+/* MOBILE TOUCH CONTROLS */
 #mobile-controls {
   position: absolute; top: 0; left: 0; width: 100%; height: 100%;
   pointer-events: none; z-index: 25; display: none;
@@ -193,7 +183,7 @@ html, body {
 .mob-btn:active { background: var(--blood-bright); }
 .mob-btn.fun-btn { background: #0088cc; border-color: #00ffff; }
 
-/* MENU & PANELS */
+/* MENUS & PANELS */
 .menu-screen {
   position: absolute; top: 0; left: 0; width: 100%; height: 100%;
   background: radial-gradient(circle at center, #200000 0%, #060606 85%);
