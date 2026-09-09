@@ -18,7 +18,7 @@
 
   <!-- CLICK TO LOCK MOUSE BANNER -->
   <div id="click-to-focus">
-    <h2>CLICK TO RESUME & LOCK MOUSE</h2>
+    <h2>CLICK SCREEN TO LOCK MOUSE & PLAY</h2>
     <p>Move mouse to look • WASD to walk • E to interact • G to drop • M for Menu</p>
   </div>
 
@@ -65,17 +65,17 @@
     <div style="font-size:11px;color:#aaa;margin-top:3px;">If a player joins or leaves, countdown cancels!</div>
   </div>
 
-  <!-- MOBILE ON-SCREEN CONTROLS -->
+  <!-- MOBILE CONTROLS -->
   <div id="mobile-controls">
     <div class="touch-zone" id="touch-move"><div class="joystick-knob" id="knob-move"></div></div>
     <div class="touch-zone" id="touch-look"><div class="joystick-knob" id="knob-look"></div></div>
     <div id="mobile-buttons">
-      <button class="mob-btn" id="m-btn-menu">MENU</button>
+      <button class="mob-btn menu-btn-touch" id="m-btn-menu">MENU</button>
       <button class="mob-btn" id="m-btn-use">USE</button>
       <button class="mob-btn" id="m-btn-drop">DROP</button>
       <button class="mob-btn" id="m-btn-crouch">CROUCH</button>
       <button class="mob-btn" id="m-btn-fire">FIRE</button>
-      <!-- FUN MODE / GHOST TOUCH BUTTONS -->
+      <!-- FUN MODE TOUCH BUTTONS (STRICTLY HIDDEN UNLESS FUN MODE ENABLED) -->
       <button class="mob-btn fun-btn" id="m-btn-spawn" style="display:none;">SPAWN</button>
       <button class="mob-btn fun-btn" id="m-btn-up" style="display:none;">UP</button>
       <button class="mob-btn fun-btn" id="m-btn-down" style="display:none;">DOWN</button>
@@ -130,7 +130,7 @@
     <button class="menu-btn" id="btn-settings">Settings</button>
   </div>
 
-  <!-- SINGLE PLAYER CONFIG -->
+  <!-- SINGLE PLAYER CONFIG MODAL -->
   <div class="menu-screen" id="sp-modal" style="display:none;">
     <div class="panel">
       <h2>SINGLE PLAYER CONFIG</h2>
@@ -152,7 +152,7 @@
         <input type="checkbox" id="sp-locks" />
       </div>
       <div class="setting-row">
-        <label style="color:#00ffaa;font-weight:bold;">Special Fun Mode (Zero-G Physics & Bouncy Balls)</label>
+        <label style="color:#00ffaa;font-weight:bold;">Special Fun Mode (Zero-G & Bouncy Balls)</label>
         <input type="checkbox" id="sp-funmode" />
       </div>
       <div class="btn-row">
@@ -179,7 +179,7 @@
         </div>
 
         <div id="lobbies-list">
-          <div style="color:#666;">Click SYNC LOBBIES to scan for live rooms...</div>
+          <div style="color:#666;">Click SYNC LOBBIES to scan for active rooms...</div>
         </div>
 
         <div class="code-join-box">
@@ -204,7 +204,7 @@
           <span id="mp-max-players-val">8</span>
         </div>
         <div class="setting-row">
-          <label>Game Difficulty</label>
+          <label>Difficulty</label>
           <select id="mp-diff">
             <option value="easy">Easy</option>
             <option value="normal" selected>Normal</option>
@@ -235,7 +235,7 @@
           <input type="checkbox" id="mp-funmode" />
         </div>
 
-        <div class="btn-row" style="margin-top:12px;">
+        <div class="btn-row" style="margin-top:14px;">
           <button class="menu-btn full" id="btn-commit-create-lobby">HOST AND HOP IN LOBBY</button>
           <button class="menu-btn full" id="btn-cancel-create">CANCEL</button>
         </div>
@@ -250,7 +250,7 @@
   <!-- HOST LAPTOP TERMINAL MODAL -->
   <div id="laptop-modal" class="menu-screen" style="display:none;">
     <div class="panel">
-      <h2 style="color:#00ffaa;">MANOR TERMINAL v2.4 [HOST ONLY]</h2>
+      <h2 style="color:#00ffaa;">MANOR TERMINAL v2.5 [HOST ONLY]</h2>
       <p style="font-size:12px;color:#aaa;margin-bottom:10px;">Lobby Management & Player Leaderboard</p>
       
       <div id="laptop-player-table" style="max-height:160px;overflow-y:auto;border:1px solid #333;padding:8px;font-size:12px;margin-bottom:10px;">
