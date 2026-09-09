@@ -6,7 +6,7 @@
   <title>Granny: Tung Tung Sahur Edition</title>
   
   <link rel="stylesheet" href="style.css" />
-  <!-- Three.js Engine & Paho MQTT Networking -->
+  <!-- Three.js 3D Engine & Global Paho MQTT Networking -->
   <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/paho-mqtt/1.0.1/mqttws31.min.js"></script>
 </head>
@@ -14,17 +14,34 @@
   <div id="canvas-container"></div>
   <div id="crosshair" class="reticle-dot"></div>
   <div id="eyelid-overlay"></div>
+  <div id="blood-vignette"></div>
 
   <!-- CLICK TO LOCK MOUSE BANNER -->
   <div id="click-to-focus">
-    <h2>CLICK SCREEN TO RESUME & LOCK MOUSE</h2>
-    <p>Move mouse to look • WASD to walk • E to interact / open • G to drop</p>
+    <h2>CLICK TO RESUME & LOCK MOUSE</h2>
+    <p>Move mouse to look • WASD to walk • E to interact • G to drop</p>
+  </div>
+
+  <!-- GP (GRANNY PLAYER) NAP OVERLAY -->
+  <div id="gp-nap-overlay">
+    <div class="nap-box">
+      <h2>YOU ARE ASLEEP!</h2>
+      <p>Your nap is almost up. Prepare to hunt the survivors...</p>
+      <div id="gp-countdown-timer">10</div>
+    </div>
+  </div>
+
+  <!-- GHOST SPECTATOR OVERLAY -->
+  <div id="ghost-indicator">
+    <h3>YOU ARE A GHOST (SPECTATING)</h3>
+    <p>Noclip active: fly through walls • [SPACE] Ascend • [C] Descend • WASD Fly</p>
   </div>
 
   <!-- IN-GAME HUD -->
   <div id="hud">
     <div id="hud-top">
       <div id="stealth-indicator">STEALTH: STANDING</div>
+      <div id="role-badge" style="display:none;">ROLE: SURVIVOR</div>
       <div id="health-wrapper">
         <span class="hud-label">HEALTH</span>
         <div id="health-bar-container"><div id="health-bar-fill"></div></div>
@@ -42,7 +59,13 @@
     </div>
   </div>
 
-  <!-- MOBILE CONTROLS (STRICTLY OPT-IN) -->
+  <!-- IN-LOBBY 10-SECOND COUNTDOWN -->
+  <div id="lobby-countdown-banner">
+    MATCH STARTING IN <span id="lobby-countdown-num">10</span>s...
+    <div style="font-size:11px;color:#aaa;margin-top:3px;">If a player joins or leaves, countdown cancels!</div>
+  </div>
+
+  <!-- MOBILE CONTROLS -->
   <div id="mobile-controls">
     <div class="touch-zone" id="touch-move"><div class="joystick-knob" id="knob-move"></div></div>
     <div class="touch-zone" id="touch-look"><div class="joystick-knob" id="knob-look"></div></div>
@@ -51,6 +74,10 @@
       <button class="mob-btn" id="m-btn-drop">DROP</button>
       <button class="mob-btn" id="m-btn-crouch">CROUCH</button>
       <button class="mob-btn" id="m-btn-fire">FIRE</button>
+      <!-- FUN MODE / GHOST TOUCH BUTTONS -->
+      <button class="mob-btn fun-btn" id="m-btn-spawn" style="display:none;">SPAWN</button>
+      <button class="mob-btn fun-btn" id="m-btn-up" style="display:none;">UP</button>
+      <button class="mob-btn fun-btn" id="m-btn-down" style="display:none;">DOWN</button>
     </div>
   </div>
 
@@ -60,6 +87,23 @@
     <p id="day-subtitle">Find a way out before she catches you.</p>
   </div>
   <div id="jumpscare-overlay"></div>
+
+  <!-- GAME OVER VOTING MODAL -->
+  <div id="game-over-modal" class="menu-screen" style="display:none;">
+    <div class="panel text-center">
+      <h1 class="title danger">GAME OVER</h1>
+      <p id="game-over-reason" style="color:#bbb;margin-bottom:15px;">The five days are up. Granny eliminated all survivors.</p>
+      
+      <div class="vote-status-box">
+        Restart Votes: <b id="vote-count">0</b> / <b id="vote-required">1</b>
+      </div>
+
+      <div class="btn-row" style="margin-top:20px;">
+        <button class="menu-btn full danger" id="btn-vote-restart">VOTE TO RESTART</button>
+        <button class="menu-btn full" id="btn-leave-lobby">LEAVE TO LOBBY</button>
+      </div>
+    </div>
+  </div>
 
   <!-- MAIN MENU -->
   <div class="menu-screen" id="main-menu">
@@ -79,8 +123,8 @@
         <select id="sp-diff">
           <option value="easy">Easy (Slower Granny)</option>
           <option value="normal" selected>Normal (Standard)</option>
-          <option value="hard">Hard (Creaky floors alert AI)</option>
-          <option value="extreme">Extreme (Faster AI + Pitch Black)</option>
+          <option value="hard">Hard (Fast AI + Creaky floors)</option>
+          <option value="extreme">Extreme (Aggressive AI + Dark)</option>
         </select>
       </div>
       <div class="setting-row">
@@ -90,6 +134,10 @@
       <div class="setting-row">
         <label>Extra Locks</label>
         <input type="checkbox" id="sp-locks" />
+      </div>
+      <div class="setting-row">
+        <label style="color:#00ffaa;font-weight:bold;">Special Fun Mode (Zero-G Physics & Bouncy Balls)</label>
+        <input type="checkbox" id="sp-funmode" />
       </div>
       <div class="btn-row">
         <button class="menu-btn" id="sp-start">START ESCAPE</button>
@@ -102,7 +150,7 @@
   <div class="menu-screen" id="mp-modal" style="display:none;">
     <div class="panel">
       <h2>GLOBAL MULTIPLAYER</h2>
-      <div id="net-status-pill">CONNECTING TO GLOBAL MESH...</div>
+      <div id="net-status-pill">CONNECTING TO CLUSTER...</div>
 
       <div id="mp-lobby-browser">
         <div class="browser-header">
@@ -114,7 +162,7 @@
         </div>
 
         <div id="lobbies-list">
-          <div style="color:#666;">Click SYNC LOBBIES to scan for active hosts worldwide...</div>
+          <div style="color:#666;">Click SYNC LOBBIES to scan for live rooms...</div>
         </div>
 
         <div class="code-join-box">
@@ -129,7 +177,7 @@
       <!-- CREATE LOBBY -->
       <div id="mp-create-box" style="display:none;">
         <div class="setting-row">
-          <label>Lobby Name</label>
+          <label>Lobby Name (Use "FUN TIME" for zero-g)</label>
           <input type="text" id="mp-room-name" value="Sahur Manor Escape" maxlength="24" />
         </div>
         <div class="setting-row">
@@ -137,22 +185,39 @@
           <input type="range" id="mp-max-players" min="2" max="21" value="8" />
           <span id="mp-max-players-val">8</span>
         </div>
-        <button class="menu-btn full" id="btn-commit-create-lobby">HOST & GENERATE CODE</button>
-      </div>
-
-      <!-- LOBBY ROOM -->
-      <div id="mp-lobby-room" style="display:none;">
-        <h3 id="room-header">LOBBY: Sahur Manor</h3>
-        <p class="code-banner">Share Room Code: <b id="room-code-display">------</b></p>
-        <p class="player-count">Connected Survivors (<span id="room-player-count">1</span>/<span id="room-player-max">8</span>):</p>
-        <ul id="room-player-list"></ul>
-        <button class="menu-btn full danger" id="btn-start-multiplayer-game" style="display:none;">START GAME (HOST)</button>
-        <p id="waiting-msg">Waiting for at least 1 other survivor to join...</p>
+        <div class="setting-row" id="row-player-granny" style="display:none;">
+          <label style="color:#ff5555;">Player as Granny (GP Mode - 5+ Players)</label>
+          <input type="checkbox" id="mp-enable-gp" />
+        </div>
+        <button class="menu-btn full" id="btn-commit-create-lobby">HOST & ENTER 3D LOBBY</button>
       </div>
 
       <div class="btn-row" style="margin-top:15px;">
         <button class="menu-btn full" id="btn-mp-back">BACK TO MENU</button>
       </div>
+    </div>
+  </div>
+
+  <!-- HOST LAPTOP TERMINAL MODAL (ACCESSIBLE INSIDE 3D LOBBY BY HOST) -->
+  <div id="laptop-modal" class="menu-screen" style="display:none;">
+    <div class="panel">
+      <h2 style="color:#00ffaa;">MANOR TERMINAL v2.4 [HOST ONLY]</h2>
+      <p style="font-size:12px;color:#aaa;margin-bottom:10px;">Lobby Management & Player Leaderboard</p>
+      
+      <div id="laptop-player-table" style="max-height:160px;overflow-y:auto;border:1px solid #333;padding:8px;font-size:12px;margin-bottom:10px;">
+        <!-- Filled dynamically -->
+      </div>
+
+      <div class="setting-row">
+        <label>Extra Barricade Locks</label>
+        <input type="checkbox" id="host-opt-locks" />
+      </div>
+      <div class="setting-row">
+        <label>Nightmare Darkness</label>
+        <input type="checkbox" id="host-opt-nightmare" />
+      </div>
+
+      <button class="menu-btn full" id="btn-close-laptop">CLOSE TERMINAL</button>
     </div>
   </div>
 
@@ -162,7 +227,7 @@
       <h2>WARDROBE CUSTOMIZATION</h2>
       <div id="wardrobe-canvas"></div>
       <div class="setting-row">
-        <label>Shirt Color</label>
+        <label>Shirt / Nightgown Color</label>
         <input type="color" id="wardrobe-shirt" value="#335577" />
       </div>
       <div class="setting-row">
@@ -189,11 +254,23 @@
 
       <!-- GRAPHICS TAB -->
       <div id="tab-gfx" class="tab-content">
+        <!-- FUNCTIONAL FPS LIMITER SLIDER (1 TO 1200 FPS) -->
+        <div class="setting-row">
+          <label>Target FPS Cap (1 - 1200 FPS)</label>
+          <input type="range" id="opt-fps-slider" min="1" max="1200" step="1" value="120" />
+          <span id="opt-fps-val">120 FPS</span>
+        </div>
+        <!-- FUNCTIONAL UI SCALE SLIDER (50% TO 150%) -->
+        <div class="setting-row">
+          <label>UI Scale (50% - 150%)</label>
+          <input type="range" id="opt-uiscale" min="0.5" max="1.5" step="0.05" value="1.0" />
+          <span id="opt-uiscale-val">100%</span>
+        </div>
         <div class="setting-row">
           <label>Graphics Preset</label>
           <select id="opt-profile">
             <option value="high" selected>Desktop Ultra</option>
-            <option value="tensor">Google Tensor Tuned (Mali G715/G720)</option>
+            <option value="tensor">Google Tensor Tuned</option>
             <option value="apple">Apple A16 - A18 Pro Max Tuned</option>
             <option value="low">Low Power / Battery Saver</option>
           </select>
@@ -204,7 +281,7 @@
           <span id="opt-fov-val">75°</span>
         </div>
         <div class="setting-row">
-          <label>Gamma / Brightness</label>
+          <label>Brightness / Gamma</label>
           <input type="range" id="opt-gamma" min="0.5" max="1.8" step="0.1" value="1.0" />
           <span id="opt-gamma-val">1.0</span>
         </div>
@@ -222,16 +299,12 @@
             <option value="none">None</option>
           </select>
         </div>
-        <div class="setting-row">
-          <label>Film Grain & Aberration</label>
-          <input type="checkbox" id="opt-grain" checked />
-        </div>
       </div>
 
       <!-- CONTROLS TAB -->
       <div id="tab-ctrl" class="tab-content" style="display:none;">
         <div class="setting-row">
-          <label>Mobile Mode (Joysticks & Touch Buttons)</label>
+          <label>Mobile Mode (Joysticks & Buttons)</label>
           <input type="checkbox" id="opt-mobile-mode" />
         </div>
         <div class="setting-row">
@@ -242,11 +315,6 @@
         <div class="setting-row">
           <label>Invert Y-Axis</label>
           <input type="checkbox" id="opt-inverty" />
-        </div>
-        <div class="setting-row">
-          <label>Head Bobbing Intensity</label>
-          <input type="range" id="opt-bob" min="0" max="1.5" step="0.1" value="1.0" />
-          <span id="opt-bob-val">1.0</span>
         </div>
         <div class="setting-row">
           <label>Crosshair Reticle</label>
@@ -282,7 +350,7 @@
           <input type="text" id="prof-name" value="Survivor" maxlength="16" />
         </div>
         <hr class="divider" />
-        <h4 class="stats-header">SURVIVOR METRICS</h4>
+        <h4 class="stats-header">SAVED CAREER STATS</h4>
         <div class="stats-grid">
           <div>Escapes Made: <b id="stat-escapes">0</b></div>
           <div>Deaths to Granny: <b id="stat-deaths" style="color:var(--blood-bright);">0</b></div>
