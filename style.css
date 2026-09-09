@@ -181,6 +181,7 @@ html, body {
   justify-content: center; text-transform: uppercase;
 }
 .mob-btn:active { background: var(--blood-bright); }
+.mob-btn.menu-btn-touch { background: #333344; border-color: #7777aa; color: #00ffaa; }
 .mob-btn.fun-btn { background: #0088cc; border-color: #00ffff; }
 
 /* MENUS & PANELS */
