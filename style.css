@@ -3,6 +3,7 @@
   --blood-bright: #ff0000;
   --panel: rgba(12, 12, 12, 0.97);
   --font-horror: 'Courier New', Courier, monospace;
+  --ui-scale: 1.0;
 }
 
 * { box-sizing: border-box; user-select: none; margin: 0; padding: 0; }
@@ -15,12 +16,50 @@ html, body {
   width: 100%; height: 100%; position: absolute; top: 0; left: 0; z-index: 1;
 }
 
+/* DYNAMIC BLOOD VIGNETTE (THICKENS & REDDENS PER DAY) */
+#blood-vignette {
+  position: absolute; top: 0; left: 0; width: 100%; height: 100%;
+  pointer-events: none; z-index: 20;
+  background: radial-gradient(circle, transparent 70%, rgba(138, 3, 3, 0.4) 95%, rgba(64, 0, 0, 0.9) 100%);
+  opacity: 0;
+  transition: opacity 1.5s ease;
+}
+
 /* WAKE-UP BLINK OVERLAY */
 #eyelid-overlay {
   position: absolute; top: 0; left: 0; width: 100%; height: 100%;
   pointer-events: none; z-index: 35; background: #000; opacity: 0;
   transition: opacity 0.35s ease;
 }
+
+/* GP (GRANNY PLAYER) NAP OVERLAY */
+#gp-nap-overlay {
+  position: absolute; top: 0; left: 0; width: 100%; height: 100%;
+  background: #000; z-index: 45; display: none;
+  flex-direction: column; align-items: center; justify-content: center;
+}
+.nap-box {
+  text-align: center; max-width: 500px; padding: 20px;
+}
+.nap-box h2 {
+  font-size: 32px; color: var(--blood-bright); letter-spacing: 4px;
+}
+.nap-box p {
+  color: #bbb; font-size: 15px; margin: 15px 0;
+}
+#gp-countdown-timer {
+  font-size: 64px; font-weight: bold; color: #fff; text-shadow: 0 0 20px var(--blood-bright);
+}
+
+/* GHOST SPECTATOR HUD */
+#ghost-indicator {
+  position: absolute; top: 80px; left: 50%; transform: translateX(-50%);
+  background: rgba(0, 40, 60, 0.85); border: 1px solid #00ffff;
+  padding: 8px 18px; border-radius: 4px; text-align: center;
+  z-index: 28; display: none; pointer-events: none;
+}
+#ghost-indicator h3 { color: #00ffff; font-size: 14px; letter-spacing: 1px; }
+#ghost-indicator p { font-size: 11px; color: #cceeff; margin-top: 3px; }
 
 /* CLICK TO FOCUS DESKTOP BANNER */
 #click-to-focus {
@@ -49,10 +88,12 @@ html, body {
 .reticle-ring { width: 22px; height: 22px; border: 2px solid rgba(255,255,255,0.6); border-radius: 50%; }
 .reticle-none { display: none; }
 
-/* IN-GAME HUD */
+/* IN-GAME HUD (SCALED BY UI SCALE SLIDER) */
 #hud {
   position: absolute; top: 0; left: 0; width: 100%; height: 100%;
   pointer-events: none; z-index: 15; display: none;
+  transform: scale(var(--ui-scale));
+  transform-origin: center center;
 }
 #hud-top {
   position: absolute; top: 16px; left: 20px; right: 20px;
@@ -63,6 +104,10 @@ html, body {
   padding: 6px 14px; border: 1px solid #444; border-radius: 3px;
 }
 #stealth-indicator.hidden { color: #00ff66; border-color: #00ff66; text-shadow: 0 0 6px #00ff66; }
+#role-badge {
+  font-size: 12px; font-weight: bold; padding: 5px 12px; border-radius: 3px;
+  background: var(--blood); color: #fff; border: 1px solid var(--blood-bright);
+}
 
 #health-wrapper { display: flex; align-items: center; gap: 8px; }
 .hud-label { font-size: 11px; color: #aaa; letter-spacing: 1px; }
@@ -91,6 +136,15 @@ html, body {
 .inv-slot.active { border-color: var(--blood-bright); box-shadow: 0 0 10px var(--blood); color: #fff; }
 .slot-num { font-size: 9px; color: #666; margin-bottom: 2px; }
 
+/* IN-LOBBY 10-SECOND COUNTDOWN */
+#lobby-countdown-banner {
+  position: absolute; top: 25px; left: 50%; transform: translateX(-50%);
+  background: rgba(15, 15, 15, 0.95); border: 2px solid #00ffaa;
+  padding: 10px 24px; border-radius: 4px; text-align: center;
+  font-size: 16px; font-weight: bold; color: #00ffaa; z-index: 25;
+  display: none;
+}
+
 /* DAY TRANSITIONS & JUMPSCARE */
 #day-splash {
   position: absolute; top: 0; left: 0; width: 100%; height: 100%;
@@ -107,10 +161,12 @@ html, body {
   z-index: 95; display: none; pointer-events: none;
 }
 
-/* MOBILE TOUCH OVERLAYS */
+/* MOBILE CONTROLS (SCALED BY UI SCALE SLIDER) */
 #mobile-controls {
   position: absolute; top: 0; left: 0; width: 100%; height: 100%;
   pointer-events: none; z-index: 25; display: none;
+  transform: scale(var(--ui-scale));
+  transform-origin: bottom center;
 }
 .touch-zone {
   position: absolute; bottom: 30px; width: 130px; height: 130px;
@@ -126,7 +182,7 @@ html, body {
 }
 #mobile-buttons {
   position: absolute; bottom: 175px; right: 20px;
-  display: flex; flex-direction: column; gap: 10px; pointer-events: auto;
+  display: flex; flex-direction: column; gap: 8px; pointer-events: auto;
 }
 .mob-btn {
   width: 55px; height: 55px; background: rgba(20,20,20,0.85);
@@ -135,6 +191,7 @@ html, body {
   justify-content: center; text-transform: uppercase;
 }
 .mob-btn:active { background: var(--blood-bright); }
+.mob-btn.fun-btn { background: #0088cc; border-color: #00ffff; }
 
 /* MENU & PANELS */
 .menu-screen {
@@ -148,6 +205,7 @@ h1.title {
   text-shadow: 0 0 20px #000, 0 0 25px var(--blood); letter-spacing: 5px;
   margin-bottom: 25px; text-align: center;
 }
+h1.title.danger { color: #ff2222; text-shadow: 0 0 25px #ff0000; }
 .subtitle { font-size: 20px; color: #bbb; }
 .menu-btn {
   width: 280px; padding: 13px; margin: 8px 0; background: #121212;
@@ -164,6 +222,7 @@ h1.title {
   background: var(--panel); border: 1px solid #333; padding: 22px;
   max-width: 650px; width: 100%; border-radius: 4px; max-height: 88vh; overflow-y: auto;
 }
+.panel.text-center { text-align: center; }
 .panel h2 { color: var(--blood-bright); margin-bottom: 14px; }
 .btn-row { display: flex; gap: 10px; margin-top: 18px; }
 
@@ -204,12 +263,10 @@ input[type="range"] { accent-color: var(--blood-bright); }
 .input-row { display: flex; gap: 6px; }
 .input-row input { flex: 1; text-transform: uppercase; }
 
-#room-header { color: #00ffaa; margin-bottom: 6px; }
-.code-banner { font-size: 12px; color: #f0c040; margin-bottom: 8px; }
-#room-code-display { font-size: 15px; letter-spacing: 2px; color: #fff; }
-.player-count { font-size: 11px; color: #aaa; }
-#room-player-list { margin: 10px 0; list-style: none; padding-left: 5px; font-size: 12px; color: #ffcccc; }
-#waiting-msg { font-size: 11px; color: #ff8800; margin-top: 8px; }
+.vote-status-box {
+  background: #181818; border: 1px solid #444; padding: 10px; border-radius: 4px;
+  font-size: 14px; color: #ffaa00; margin: 15px 0;
+}
 
 .divider { border: 0; border-top: 1px solid #333; margin: 15px 0; }
 .stats-header { color: #aaa; margin-bottom: 8px; }
