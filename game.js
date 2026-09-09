@@ -1,108 +1,63 @@
 /* =========================================================================
-   GAME.JS - LAG-FREE PHYSICS, SMART TUNG TUNG SAHUR AI & ZERO ALLOCATION LOOP
+   GAME.JS - GP MODE, GHOST FLIGHT, 3D LOBBY, FUN MODE, 1-1200 FPS & AI
    ========================================================================= */
 
-// Pre-allocated static vectors for 0-allocation physics & collision checks
+// Pre-allocated static vectors for 0-allocation physics & collision loops
 const _tempVecA = new THREE.Vector3();
 const _tempRayOrigin = new THREE.Vector3();
 const _tempClampPt = new THREE.Vector3();
 
-// 1. WAYPOINT GRAPH FOR GRANNY NAVIGATION
-const NavGraph = {
-  nodes: {
-    'bed_start': new THREE.Vector3(-8.5, 6.0, 8.5),
-    'door_start': new THREE.Vector3(-5.5, 6.0, 2.5),
-    'hall_mid': new THREE.Vector3(-2.0, 6.0, 2.5),
-    'hall_east': new THREE.Vector3(4.0, 6.0, 2.5),
-    'stairs_top': new THREE.Vector3(5.0, 6.0, 4.5),
-    'stairs_mid': new THREE.Vector3(5.0, 3.0, 8.5),
-    'stairs_bottom': new THREE.Vector3(5.0, 0.2, 13.5),
-    'foyer': new THREE.Vector3(0.0, 0.2, 12.0),
-    'front_door': new THREE.Vector3(0.0, 0.2, 16.0),
-    'living_room': new THREE.Vector3(-8.0, 0.2, 8.0),
-    'dining_room': new THREE.Vector3(-8.0, 0.2, -2.0),
-    'kitchen': new THREE.Vector3(8.0, 0.2, -6.0),
-    'stairs_down_top': new THREE.Vector3(-5.0, 0.2, -1.5),
-    'stairs_down_mid': new THREE.Vector3(-5.0, -3.0, -6.0),
-    'stairs_down_bot': new THREE.Vector3(-5.0, -5.8, -10.5),
-    'garage_main': new THREE.Vector3(-7.0, -5.8, -6.0),
-    'garage_east': new THREE.Vector3(4.0, -5.8, -6.0)
-  },
-
-  edges: {
-    'bed_start': ['door_start'],
-    'door_start': ['bed_start', 'hall_mid'],
-    'hall_mid': ['door_start', 'hall_east'],
-    'hall_east': ['hall_mid', 'stairs_top'],
-    'stairs_top': ['hall_east', 'stairs_mid'],
-    'stairs_mid': ['stairs_top', 'stairs_bottom'],
-    'stairs_bottom': ['stairs_mid', 'foyer'],
-    'foyer': ['stairs_bottom', 'front_door', 'living_room', 'stairs_down_top'],
-    'front_door': ['foyer'],
-    'living_room': ['foyer', 'dining_room'],
-    'dining_room': ['living_room', 'kitchen'],
-    'kitchen': ['dining_room'],
-    'stairs_down_top': ['foyer', 'stairs_down_mid'],
-    'stairs_down_mid': ['stairs_down_top', 'stairs_down_bot'],
-    'stairs_down_bot': ['stairs_down_mid', 'garage_main'],
-    'garage_main': ['stairs_down_bot', 'garage_east'],
-    'garage_east': ['garage_main']
-  },
-
-  getNearestNode(pos) {
-    let best = null;
-    let minDist = Infinity;
-    for (const [id, nodePos] of Object.entries(this.nodes)) {
-      const d = pos.distanceTo(nodePos);
-      if (d < minDist) {
-        minDist = d;
-        best = id;
-      }
-    }
-    return best;
-  },
-
-  findPath(startPos, endPos) {
-    const startNode = this.getNearestNode(startPos);
-    const endNode = this.getNearestNode(endPos);
-
-    if (startNode === endNode) {
-      return [endPos.clone()];
+// 1. PERSISTENT LOCAL STORAGE & STATS
+const CareerStats = {
+  load() {
+    const savedName = localStorage.getItem('granny_username');
+    if (savedName) {
+      document.getElementById('prof-name').value = savedName;
+    } else {
+      const randGuest = 'Survivor_' + Math.floor(100 + Math.random() * 899);
+      document.getElementById('prof-name').value = randGuest;
+      localStorage.setItem('granny_username', randGuest);
     }
 
-    const queue = [[startNode]];
-    const visited = new Set([startNode]);
-
-    while (queue.length > 0) {
-      const path = queue.shift();
-      const curr = path[path.length - 1];
-
-      if (curr === endNode) {
-        return path.map(id => this.nodes[id].clone()).concat([endPos.clone()]);
-      }
-
-      for (const neighbor of (this.edges[curr] || [])) {
-        if (!visited.has(neighbor)) {
-          visited.add(neighbor);
-          queue.push([...path, neighbor]);
-        }
-      }
+    const s = localStorage.getItem('granny_v5_stats');
+    if (s) {
+      try { Object.assign(GameState.playerStats, JSON.parse(s)); } catch(e){}
     }
-    return [endPos.clone()];
+    this.updateUI();
+
+    document.getElementById('prof-name').onchange = (e) => {
+      localStorage.setItem('granny_username', e.target.value.trim() || 'Survivor');
+    };
+  },
+
+  save() {
+    localStorage.setItem('granny_v5_stats', JSON.stringify(GameState.playerStats));
+    this.updateUI();
+  },
+
+  updateUI() {
+    document.getElementById('stat-escapes').innerText = GameState.playerStats.escapes;
+    document.getElementById('stat-deaths').innerText = GameState.playerStats.deaths;
+    document.getElementById('stat-stuns').innerText = GameState.playerStats.stuns;
+    document.getElementById('stat-days').innerText = GameState.playerStats.days;
   }
 };
 
-// 2. FIRST-PERSON HELD VIEWMODEL
+// 2. FIRST-PERSON VIEWMODEL (WEAPONS & GP BAT)
 const Viewmodel = {
   group: new THREE.Group(),
   models: {},
   activeKey: null,
   loadedDart: null,
+  gpBat: null,
+  isSwinging: false,
+  swingTime: 0,
 
   init(camera) {
     camera.add(this.group);
     this.group.position.set(0.32, -0.28, -0.55);
 
+    // Crossbow Viewmodel
     const bow = new THREE.Group();
     const stock = new THREE.Mesh(new THREE.BoxGeometry(0.08, 0.1, 0.65), Assets.woodMat);
     bow.add(stock);
@@ -116,6 +71,7 @@ const Viewmodel = {
     bow.add(this.loadedDart);
     this.models['Tranquilizer Crossbow'] = bow;
 
+    // Shotgun Viewmodel
     const sg = new THREE.Group();
     const barrels = new THREE.Mesh(new THREE.CylinderGeometry(0.035, 0.035, 0.72, 8), Assets.metalMat);
     barrels.rotation.x = Math.PI * 0.5;
@@ -126,6 +82,7 @@ const Viewmodel = {
     sg.add(sgStock);
     this.models['Shotgun'] = sg;
 
+    // Hammer Viewmodel
     const hm = new THREE.Group();
     const handle = new THREE.Mesh(new THREE.CylinderGeometry(0.025, 0.025, 0.46, 8), Assets.woodMat);
     hm.add(handle);
@@ -135,6 +92,7 @@ const Viewmodel = {
     hm.rotation.x = 0.4;
     this.models['Hammer'] = hm;
 
+    // Gasoline Can Viewmodel
     const gas = new THREE.Group();
     const gasBody = new THREE.Mesh(new THREE.BoxGeometry(0.24, 0.32, 0.18), Assets.bloodMat);
     gas.add(gasBody);
@@ -143,6 +101,7 @@ const Viewmodel = {
     gas.add(spout);
     this.models['Gasoline Can'] = gas;
 
+    // Keys Viewmodel
     const key = new THREE.Group();
     const ring = new THREE.Mesh(new THREE.TorusGeometry(0.06, 0.015, 6, 12), Assets.metalMat);
     key.add(ring);
@@ -152,6 +111,15 @@ const Viewmodel = {
     key.add(stem);
     this.models['GenericKey'] = key;
 
+    // Granny Player (GP) Mallet Bat Viewmodel
+    const batGroup = new THREE.Group();
+    const batMesh = new THREE.Mesh(new THREE.CylinderGeometry(0.045, 0.07, 1.1, 8), Assets.woodMat);
+    batMesh.position.set(0.1, 0.1, -0.2);
+    batMesh.rotation.set(0.5, 0, -0.3);
+    batGroup.add(batMesh);
+    this.models['GP_Bat'] = batGroup;
+    this.gpBat = batGroup;
+
     Object.values(this.models).forEach(m => { m.visible = false; this.group.add(m); });
   },
 
@@ -160,6 +128,11 @@ const Viewmodel = {
     this.activeKey = itemName;
     if (!itemName) return;
 
+    if (GameState.isGP) {
+      this.models['GP_Bat'].visible = true;
+      return;
+    }
+
     if (this.models[itemName]) {
       this.models[itemName].visible = true;
     } else if (itemName.includes('Key')) {
@@ -167,8 +140,22 @@ const Viewmodel = {
     }
   },
 
-  animateBob(dt, isMoving) {
-    if (isMoving) {
+  triggerBatSwing() {
+    if (this.isSwinging) return;
+    this.isSwinging = true;
+    this.swingTime = 0;
+  },
+
+  animate(dt, isMoving) {
+    if (this.isSwinging && this.gpBat) {
+      this.swingTime += dt * 6.5;
+      this.gpBat.rotation.x = 0.5 - Math.sin(this.swingTime) * 1.4;
+      this.gpBat.rotation.y = Math.sin(this.swingTime) * 0.8;
+      if (this.swingTime >= Math.PI) {
+        this.isSwinging = false;
+        this.gpBat.rotation.set(0, 0, 0);
+      }
+    } else if (isMoving) {
       const t = performance.now() * 0.008;
       this.group.position.x = 0.32 + Math.cos(t) * 0.015;
       this.group.position.y = -0.28 + Math.sin(t * 2) * 0.015;
@@ -178,9 +165,9 @@ const Viewmodel = {
   }
 };
 
-// 3. PLAYER CONTROLLER WITH CLAMPED VERTICAL COLLISION (NO TUNNELING)
+// 3. PLAYER CONTROLLER WITH GP ROLE, GHOST NOCLIP & BLOOD PROGRESSION
 const Player = {
-  position: new THREE.Vector3(-6.6, 6.0, 8.5),
+  position: new THREE.Vector3(60.0, 30.0, 2.0), // Starts in 3D Lobby
   velocity: new THREE.Vector3(),
   rotation: new THREE.Euler(0, 0, 0, 'YXZ'),
   radius: 0.35,
@@ -188,11 +175,13 @@ const Player = {
   health: 100,
   isCrouched: false,
   isHiding: false,
+  isGhost: false,
   isIntroPlaying: false,
   introTimer: 0,
   hidingSpot: null,
   speed: 4.6,
   crouchSpeed: 2.2,
+  limpMultiplier: 1.0,
   activeSlot: 0,
   isGrounded: false,
 
@@ -242,6 +231,7 @@ const Player = {
   },
 
   update(dt, camera) {
+    // A. WAKE-UP BED ANIMATION PROGRESSION
     if (this.isIntroPlaying) {
       this.introTimer += dt;
 
@@ -282,6 +272,26 @@ const Player = {
       return;
     }
 
+    // B. GHOST SPECTATOR NOCLIP FLIGHT
+    if (this.isGhost) {
+      const ghostSpd = 7.0;
+      const fwd = new THREE.Vector3(0, 0, -1).applyEuler(this.rotation);
+      const right = new THREE.Vector3(1, 0, 0).applyEuler(this.rotation);
+
+      if (Input.keys['KeyW']) this.position.addScaledVector(fwd, ghostSpd * dt);
+      if (Input.keys['KeyS']) this.position.addScaledVector(fwd, -ghostSpd * dt);
+      if (Input.keys['KeyA']) this.position.addScaledVector(right, -ghostSpd * dt);
+      if (Input.keys['KeyD']) this.position.addScaledVector(right, ghostSpd * dt);
+      if (Input.keys['Space']) this.position.y += ghostSpd * dt;
+      if (Input.keys['KeyC']) this.position.y -= ghostSpd * dt;
+
+      camera.position.copy(this.position);
+      camera.quaternion.setFromEuler(this.rotation);
+      this.updateFlashlight(camera);
+      return;
+    }
+
+    // C. UNDER-BED FREE LOOK
     if (this.isHiding) {
       if (this.hidingSpot) {
         camera.position.copy(this.hidingSpot.position);
@@ -291,7 +301,8 @@ const Player = {
       return;
     }
 
-    const curSpeed = this.isCrouched ? this.crouchSpeed : this.speed;
+    // D. STANDARD FIRST-PERSON MOVEMENT (WITH LIMP FACTOR)
+    const curSpeed = (this.isCrouched ? this.crouchSpeed : this.speed) * this.limpMultiplier;
     const move = new THREE.Vector3();
     if (Input.keys['KeyW']) move.z -= 1;
     if (Input.keys['KeyS']) move.z += 1;
@@ -309,8 +320,15 @@ const Player = {
       move.applyAxisAngle(new THREE.Vector3(0, 1, 0), this.rotation.y);
     }
 
-    this.velocity.y -= 22 * dt;
-    if (this.velocity.y < -25) this.velocity.y = -25;
+    // Fun Mode Zero-G Float Handling
+    if (GameState.funMode) {
+      if (Input.keys['KeyZ']) this.velocity.y = 4.0;
+      else if (Input.keys['KeyX']) this.velocity.y = -4.0;
+      else this.velocity.y *= 0.95;
+    } else {
+      this.velocity.y -= 22 * dt;
+      if (this.velocity.y < -25) this.velocity.y = -25;
+    }
 
     const dx = move.x * curSpeed * dt;
     const dz = move.z * curSpeed * dt;
@@ -321,12 +339,12 @@ const Player = {
 
     this.moveVertical(dy);
 
-    const eyeHeight = this.isCrouched ? 0.95 : 1.62;
+    const eyeHeight = this.isCrouched ? 0.95 : (GameState.isGP ? 2.0 : 1.62);
     camera.position.set(this.position.x, this.position.y + eyeHeight, this.position.z);
     camera.quaternion.setFromEuler(this.rotation);
 
     this.updateFlashlight(camera);
-    Viewmodel.animateBob(dt, isMoving);
+    Viewmodel.animate(dt, isMoving);
 
     this.checkDynamicCollisions(move, curSpeed);
   },
@@ -334,7 +352,7 @@ const Player = {
   checkDynamicCollisions(moveDir, speed) {
     const now = performance.now();
 
-    // 1. Kick/push dynamic items on the floor (throttled impulse)
+    // 1. Kick/push dynamic physics items on the floor
     for (let i = 0; i < House.physicsItems.length; i++) {
       const item = House.physicsItems[i];
       if (item.inInventory) continue;
@@ -356,12 +374,12 @@ const Player = {
         if (now - item.lastPushTime > 400) {
           item.lastPushTime = now;
           audio.playItemDrop(item.name);
-          MonsterAI.hearNoise(item.group.position, 10);
+          MonsterAI.hearNoise(item.group.position, 12);
         }
       }
     }
 
-    // 2. Tippable Bedside Table Knockdown Check (Debounced)
+    // 2. Tippable Bedside Table Knockdown Check
     for (let i = 0; i < House.dynamicProps.length; i++) {
       const prop = House.dynamicProps[i];
       if (prop.type === 'table' && !prop.isTipped) {
@@ -378,6 +396,15 @@ const Player = {
           audio.playItemDrop('Table');
           MonsterAI.hearNoise(prop.group.position, 25);
           showPrompt('You knocked over the bedside table!');
+        }
+      } else if (prop.type === 'painting' && !prop.isFallen) {
+        // 3. Wall Painting Knock-Down Check
+        const dist = this.position.distanceTo(prop.group.position);
+        if (dist < 0.9) {
+          prop.isFallen = true;
+          prop.velocity.set(0, -3.0, 0);
+          audio.playPaintingDrop();
+          MonsterAI.hearNoise(prop.group.position, 18);
         }
       }
     }
@@ -421,8 +448,12 @@ const Player = {
     this.position.y = stepUpY;
   },
 
-  // SAFE FLOOR RESOLUTION: NEVER TUNNELS THROUGH FLOORS
   moveVertical(dy) {
+    if (GameState.funMode) {
+      this.position.y += dy;
+      return;
+    }
+
     const targetY = this.position.y + dy;
     const pMinX = this.position.x - this.radius;
     const pMaxX = this.position.x + this.radius;
@@ -450,7 +481,6 @@ const Player = {
         return;
       }
 
-      // Absolute floor clamp safeguard
       if (targetY < -6.0) {
         this.position.y = -6.0;
         this.velocity.y = 0;
@@ -475,6 +505,28 @@ const Player = {
   },
 
   fireWeapon(camera) {
+    // Granny Player Bat Strike
+    if (GameState.isGP) {
+      Viewmodel.triggerBatSwing();
+      audio.playBatHit();
+
+      // Check if any survivor is in front of GP
+      const hitDist = 2.2;
+      for (const [id, peer] of Object.entries(NetworkEngine.peers)) {
+        if (peer.mesh && !peer.isGhost) {
+          const toPeer = new THREE.Vector3().subVectors(peer.mesh.position, this.position);
+          if (toPeer.length() < hitDist) {
+            const fwd = new THREE.Vector3(0, 0, -1).applyEuler(this.rotation);
+            toPeer.normalize();
+            if (fwd.angleTo(toPeer) < Math.PI * 0.35) {
+              NetworkEngine.broadcastKill(id);
+            }
+          }
+        }
+      }
+      return;
+    }
+
     const cur = Inventory.items[this.activeSlot];
     if (!cur) return;
 
@@ -496,18 +548,17 @@ const Player = {
     }
   },
 
-  takeDamage(amount) {
-    this.health = Math.max(0, this.health - amount);
-    document.getElementById('health-bar-fill').style.width = `${this.health}%`;
-    if (this.health <= 0) {
-      triggerJumpscare();
-      this.health = 100;
-      document.getElementById('health-bar-fill').style.width = '100%';
-    }
+  becomeGhost(corpsePos) {
+    this.isGhost = true;
+    document.getElementById('ghost-indicator').style.display = 'block';
+    document.getElementById('stealth-indicator').innerText = 'STATUS: GHOST (SPECTATOR)';
+
+    // Spawn Dead Body Mesh on Floor
+    spawnDeadCorpseMesh(scene, corpsePos || this.position);
   }
 };
 
-// 4. INVENTORY SYSTEM
+// 4. INVENTORY & SILENT DROP
 const Inventory = {
   items: [null, null, null, null, null],
 
@@ -535,10 +586,6 @@ const Inventory = {
     return false;
   },
 
-  has(name) {
-    return this.items.some(it => it && it.name === name);
-  },
-
   dropCurrent(camera, scene) {
     const cur = this.items[Player.activeSlot];
     if (!cur) return;
@@ -555,6 +602,7 @@ const Inventory = {
 
     cur.velocity.copy(fwd.clone().multiplyScalar(4).add(new THREE.Vector3(0, 1.8, 0)));
     cur.isGrounded = false;
+    // Silent drop to player: no prompt, dispatches sound to AI Granny
   },
 
   selectSlot(idx) {
@@ -578,7 +626,49 @@ const Inventory = {
   }
 };
 
-// 5. UPDATE PROPS & DOORS INTERPOLATION
+// 5. FUN MODE BOUNCY BALLS & ZERO-G SIMULATION
+const FunPhysics = {
+  balls: [],
+
+  spawnBouncyBall(scene, pos, dir) {
+    const geo = new THREE.SphereGeometry(0.35, 12, 12);
+    const mat = new THREE.MeshStandardMaterial({
+      color: new THREE.Color().setHSL(Math.random(), 1.0, 0.5),
+      roughness: 0.1,
+      metalness: 0.2
+    });
+    const ballMesh = new THREE.Mesh(geo, mat);
+    ballMesh.position.copy(pos);
+    scene.add(ballMesh);
+
+    const ball = {
+      mesh: ballMesh,
+      velocity: dir.clone().multiplyScalar(12.0),
+      radius: 0.35
+    };
+    this.balls.push(ball);
+    audio.playBounce();
+  },
+
+  update(dt) {
+    for (let i = 0; i < this.balls.length; i++) {
+      const b = this.balls[i];
+      b.mesh.position.addScaledVector(b.velocity, dt);
+
+      // Bounce infinitely off world boxes
+      for (let j = 0; j < CollisionWorld.boxes.length; j++) {
+        const box = CollisionWorld.boxes[j];
+        if (box.containsPoint(b.mesh.position)) {
+          b.velocity.negate().multiplyScalar(1.02);
+          audio.playBounce();
+          break;
+        }
+      }
+    }
+  }
+};
+
+// 6. UPDATE PROPS & DOORS INTERPOLATION
 function updatePhysicsAndWorld(dt) {
   for (let i = 0; i < House.doors.length; i++) {
     const door = House.doors[i];
@@ -606,6 +696,8 @@ function updatePhysicsAndWorld(dt) {
       if (prop.vaseMesh) {
         prop.vaseMesh.position.y = Math.max(0.1, prop.vaseMesh.position.y - 4.0 * dt);
       }
+    } else if (prop.type === 'painting' && prop.isFallen && prop.group.position.y > 6.2) {
+      prop.group.position.addScaledVector(prop.velocity, dt);
     }
   }
 
@@ -614,7 +706,7 @@ function updatePhysicsAndWorld(dt) {
     if (item.inInventory) continue;
 
     if (!item.isGrounded) {
-      item.velocity.y -= 18 * dt;
+      item.velocity.y -= (GameState.funMode ? 0 : 18) * dt;
       item.group.position.addScaledVector(item.velocity, dt);
 
       const pos = item.group.position;
@@ -631,15 +723,15 @@ function updatePhysicsAndWorld(dt) {
           }
         }
       }
-    } else if (item.velocity.lengthSq() > 0.01) {
-      item.group.position.x += item.velocity.x * dt;
-      item.group.position.z += item.velocity.z * dt;
-      item.velocity.multiplyScalar(0.9);
     }
+  }
+
+  if (GameState.funMode) {
+    FunPhysics.update(dt);
   }
 }
 
-// 6. GRANNY TUNG TUNG SAHUR 3D MODEL & AI CONTROLLER
+// 7. GRANNY TUNG TUNG SAHUR AI
 const MonsterAI = {
   mesh: null,
   state: 'PATROL',
@@ -663,62 +755,50 @@ const MonsterAI = {
   init(scene) {
     const g = new THREE.Group();
 
-    // Batik Cloth Sarong
     const sarongCanvas = document.createElement('canvas');
     sarongCanvas.width = 128; sarongCanvas.height = 128;
     const sCtx = sarongCanvas.getContext('2d');
     sCtx.fillStyle = '#4a382a'; sCtx.fillRect(0, 0, 128, 128);
     sCtx.fillStyle = '#b89055';
     for (let i = 0; i < 64; i += 16) {
-      for (let j = 0; j < 64; j += 16) {
-        sCtx.fillRect(i * 2, j * 2, 4, 4);
-      }
+      for (let j = 0; j < 64; j += 16) sCtx.fillRect(i * 2, j * 2, 4, 4);
     }
     const sarongTex = new THREE.CanvasTexture(sarongCanvas);
     const gownMat = new THREE.MeshStandardMaterial({ map: sarongTex, roughness: 0.9 });
     const woodMat = Assets.woodMat;
     const skinMat = Assets.skinMat;
 
-    // Torso / Hunched Gown
     const torso = new THREE.Mesh(new THREE.CylinderGeometry(0.38, 0.72, 1.85, 10), gownMat);
     torso.position.y = 1.3;
     torso.rotation.x = 0.22;
     g.add(torso);
 
-    // Sahur Kentongan (Slit Drum) slung across chest
     const kentongan = new THREE.Mesh(new THREE.CylinderGeometry(0.12, 0.12, 0.75, 8), woodMat);
     kentongan.rotation.z = Math.PI * 0.45;
     kentongan.rotation.x = 0.3;
     kentongan.position.set(0.1, 1.35, 0.48);
     g.add(kentongan);
 
-    // Head
     const headGroup = new THREE.Group();
     headGroup.position.set(0, 2.35, 0.25);
-
     const skull = new THREE.Mesh(new THREE.SphereGeometry(0.36, 10, 10), skinMat);
     headGroup.add(skull);
 
-    // Glowing Red Eyes
     const eyeMat = new THREE.MeshBasicMaterial({ color: 0xff0000 });
     const eye1 = new THREE.Mesh(new THREE.SphereGeometry(0.065, 6, 6), eyeMat);
     eye1.position.set(-0.13, 0.06, 0.32);
-    const eye2 = eye1.clone();
-    eye2.position.x = 0.13;
-    headGroup.add(eye1);
-    headGroup.add(eye2);
+    const eye2 = eye1.clone(); eye2.position.x = 0.13;
+    headGroup.add(eye1); headGroup.add(eye2);
 
-    const hair = new THREE.Mesh(new THREE.BoxGeometry(0.65, 0.2, 0.65), new THREE.MeshStandardMaterial({ color: 0x888888, roughness: 0.9 }));
+    const hair = new THREE.Mesh(new THREE.BoxGeometry(0.65, 0.2, 0.65), new THREE.MeshStandardMaterial({ color: 0x888888 }));
     hair.position.set(0, 0.22, -0.05);
     headGroup.add(hair);
 
     g.add(headGroup);
     this.head = headGroup;
 
-    // Right Arm with Mallet / Beater
     const arm = new THREE.Group();
     arm.position.set(0.65, 1.9, 0.15);
-
     const armMesh = new THREE.Mesh(new THREE.CylinderGeometry(0.08, 0.08, 0.9, 6), gownMat);
     armMesh.position.y = -0.45;
     arm.add(armMesh);
@@ -741,29 +821,17 @@ const MonsterAI = {
   applyDifficultySettings() {
     const d = GameState.difficulty || 'normal';
     if (d === 'easy') {
-      this.speed = 1.8;
-      this.chaseSpeed = 2.9;
-      this.visionRange = 10.0;
-      this.visionAngle = Math.PI * 0.33;
-      this.hearingRadiusMod = 0.7;
+      this.speed = 1.8; this.chaseSpeed = 2.9; this.visionRange = 10.0;
+      this.visionAngle = Math.PI * 0.33; this.hearingRadiusMod = 0.7;
     } else if (d === 'normal') {
-      this.speed = 2.3;
-      this.chaseSpeed = 3.9;
-      this.visionRange = 14.0;
-      this.visionAngle = Math.PI * 0.42;
-      this.hearingRadiusMod = 1.0;
+      this.speed = 2.3; this.chaseSpeed = 3.9; this.visionRange = 14.0;
+      this.visionAngle = Math.PI * 0.42; this.hearingRadiusMod = 1.0;
     } else if (d === 'hard') {
-      this.speed = 2.8;
-      this.chaseSpeed = 4.8;
-      this.visionRange = 18.0;
-      this.visionAngle = Math.PI * 0.50;
-      this.hearingRadiusMod = 1.3;
+      this.speed = 2.8; this.chaseSpeed = 4.8; this.visionRange = 18.0;
+      this.visionAngle = Math.PI * 0.50; this.hearingRadiusMod = 1.3;
     } else if (d === 'extreme') {
-      this.speed = 3.3;
-      this.chaseSpeed = 5.5;
-      this.visionRange = 22.0;
-      this.visionAngle = Math.PI * 0.60;
-      this.hearingRadiusMod = 1.6;
+      this.speed = 3.3; this.chaseSpeed = 5.5; this.visionRange = 22.0;
+      this.visionAngle = Math.PI * 0.60; this.hearingRadiusMod = 1.6;
     }
   },
 
@@ -776,13 +844,10 @@ const MonsterAI = {
   },
 
   hasLineOfSightToPlayer() {
-    if (Player.isHiding || Player.isIntroPlaying) return false;
+    if (Player.isHiding || Player.isIntroPlaying || Player.isGhost) return false;
 
-    // Run LOS raycasting once every 4 frames for performance
     this.losCheckFrame++;
-    if (this.losCheckFrame % 4 !== 0) {
-      return this.lastCanSeeResult;
-    }
+    if (this.losCheckFrame % 4 !== 0) return this.lastCanSeeResult;
 
     _tempVecA.subVectors(Player.position, this.mesh.position);
     const dist = _tempVecA.length();
@@ -794,17 +859,22 @@ const MonsterAI = {
     const fwd = new THREE.Vector3(0, 0, 1).applyEuler(this.mesh.rotation);
     _tempVecA.normalize();
 
-    // 75-degree vision cone: if her back is turned, she CANNOT see you!
+    // 75° Vision Cone
     const angle = fwd.angleTo(_tempVecA);
     if (angle > this.visionAngle) {
       this.lastCanSeeResult = false;
       return false;
     }
 
+    // Proximity agro in same room (unless crouching!)
+    if (dist < 4.5 && !Player.isCrouched) {
+      this.lastCanSeeResult = true;
+      return true;
+    }
+
     _tempRayOrigin.set(this.mesh.position.x, this.mesh.position.y + 1.8, this.mesh.position.z);
     const ray = new THREE.Ray(_tempRayOrigin, _tempVecA);
 
-    // Fast check against walls and closed doors
     const walls = CollisionWorld.wallsAndDoors;
     for (let i = 0; i < walls.length; i++) {
       const box = walls[i];
@@ -842,7 +912,7 @@ const MonsterAI = {
   },
 
   update(dt) {
-    if (!this.mesh) return;
+    if (!this.mesh || GameState.isGP) return;
 
     this.animTime += dt;
     if (this.rightArm) {
@@ -916,7 +986,7 @@ const MonsterAI = {
     }
 
     const distToPlayer = this.mesh.position.distanceTo(Player.position);
-    if (distToPlayer < 1.4 && !Player.isHiding && !Player.isIntroPlaying && this.state !== 'STUNNED') {
+    if (distToPlayer < 1.5 && !Player.isHiding && !Player.isIntroPlaying && !Player.isGhost && this.state !== 'STUNNED') {
       triggerJumpscare();
     }
   },
@@ -929,7 +999,7 @@ const MonsterAI = {
   }
 };
 
-// 7. INPUT & POINTER LOCK
+// 8. INPUT & CONTROLLER
 const Input = {
   keys: {},
   mouseSens: 0.0022,
@@ -942,6 +1012,10 @@ const Input = {
       if (e.code === 'KeyE') doInteract(camera);
       if (e.code === 'KeyG') Inventory.dropCurrent(camera, scene);
       if (e.code === 'KeyC') toggleCrouch();
+      if (e.code === 'Enter') handleLobbyStartTrigger();
+      if (e.code === 'KeyL' && GameState.funMode) {
+        FunPhysics.spawnBouncyBall(scene, camera.position, new THREE.Vector3(0, 0, -1).applyEuler(Player.rotation));
+      }
       if (e.code >= 'Digit1' && e.code <= 'Digit5') {
         Inventory.selectSlot(parseInt(e.code.replace('Digit', '')) - 1);
       }
@@ -1037,6 +1111,14 @@ const Input = {
     document.getElementById('m-btn-drop').onclick = () => Inventory.dropCurrent(camera, scene);
     document.getElementById('m-btn-crouch').onclick = toggleCrouch;
     document.getElementById('m-btn-fire').onclick = () => Player.fireWeapon(camera);
+
+    document.getElementById('m-btn-spawn').onclick = () => {
+      if (GameState.funMode) {
+        FunPhysics.spawnBouncyBall(scene, camera.position, new THREE.Vector3(0, 0, -1).applyEuler(Player.rotation));
+      }
+    };
+    document.getElementById('m-btn-up').onclick = () => { Player.velocity.y = 4.0; };
+    document.getElementById('m-btn-down').onclick = () => { Player.velocity.y = -4.0; };
   }
 };
 
@@ -1057,7 +1139,6 @@ function emergeFromHiding() {
   Player.isHiding = false;
   document.getElementById('stealth-indicator').innerText = 'STEALTH: STANDING';
   document.getElementById('stealth-indicator').classList.remove('hidden');
-  showPrompt('Emerged from hiding space.');
 }
 
 function doInteract(camera) {
@@ -1077,7 +1158,7 @@ function doInteract(camera) {
     const target = House.interactables.find(o => o.mesh === hitObj || o.mesh === hitObj.parent);
     if (target) {
       const msg = target.action(Inventory);
-      showPrompt(msg || 'Interacted.');
+      if (msg) showPrompt(msg);
     }
     return;
   }
@@ -1089,7 +1170,6 @@ function doInteract(camera) {
       Player.hidingSpot = spot;
       document.getElementById('stealth-indicator').innerText = `STEALTH: UNDER ${spot.type.toUpperCase()}`;
       document.getElementById('stealth-indicator').classList.add('hidden');
-      showPrompt(`Hiding under ${spot.type}. Rotate mouse to look around! Press [C] or [E] to emerge.`);
       return;
     }
   }
@@ -1103,9 +1183,10 @@ function showPrompt(text) {
   p._t = setTimeout(() => { p.style.display = 'none'; }, 2400);
 }
 
-// 8. DAY PROGRESSION & JUMPSCARE
+// 9. DAY PROGRESSION, JUMPSCARE & GAME OVER VOTING
 function triggerJumpscare() {
   audio.stopChase();
+  audio.playBatHit();
   audio.playJumpscare();
   const overlay = document.getElementById('jumpscare-overlay');
   overlay.style.display = 'block';
@@ -1113,13 +1194,24 @@ function triggerJumpscare() {
   setTimeout(() => {
     overlay.style.display = 'none';
     GameState.day++;
+    GameState.playerStats.deaths++;
+    CareerStats.save();
+
     if (GameState.day > GameState.maxDays) {
-      alert('THE 5 DAYS ARE OVER. You failed to escape.');
-      window.location.reload();
+      showGameOverModal('The 5 days are up. Granny eliminated all survivors.');
     } else {
       respawnPlayer();
     }
   }, 1400);
+}
+
+function updateDayVignetteAndSpeed() {
+  const blood = document.getElementById('blood-vignette');
+  const opacities = [0, 0, 0.25, 0.45, 0.65, 0.88];
+  blood.style.opacity = opacities[GameState.day] || 0;
+
+  const speedMultipliers = [1, 1, 0.92, 0.84, 0.76, 0.68];
+  Player.limpMultiplier = speedMultipliers[GameState.day] || 1;
 }
 
 function respawnPlayer() {
@@ -1143,9 +1235,10 @@ function showDaySequence() {
   document.getElementById('day-title').innerText = `DAY ${GameState.day}`;
   document.getElementById('day-subtitle').innerText =
     GameState.day === 1 ? 'Find a way out before she catches you.' :
-    GameState.day === 5 ? 'FINAL DAY. She will not spare you.' :
+    GameState.day === 5 ? 'DAY 5, no escape...' :
     'You woke up with a pounding headache.';
 
+  updateDayVignetteAndSpeed();
   Player.prepareBedPose(camera);
 
   setTimeout(() => {
@@ -1160,13 +1253,343 @@ function showDaySequence() {
 }
 
 function triggerVictory(method) {
+  GameState.playerStats.escapes++;
+  CareerStats.save();
   alert(`VICTORY! ${method}`);
   window.location.reload();
 }
 
-// 9. SETTINGS CONTROLLER
+function showGameOverModal(reason) {
+  document.getElementById('game-over-modal').style.display = 'flex';
+  document.getElementById('game-over-reason').innerText = reason;
+  updateVoteUI();
+}
+
+function updateVoteUI() {
+  const total = Object.keys(NetworkEngine.peers).length + 1;
+  document.getElementById('vote-count').innerText = GameState.restartVotes;
+  document.getElementById('vote-required').innerText = total;
+
+  if (GameState.restartVotes >= total) {
+    document.getElementById('game-over-modal').style.display = 'none';
+    GameState.day = 1;
+    GameState.restartVotes = 0;
+    respawnPlayer();
+  }
+}
+
+document.getElementById('btn-vote-restart').onclick = () => {
+  GameState.restartVotes++;
+  NetworkEngine.broadcast('VOTE_RESTART', { count: GameState.restartVotes });
+  updateVoteUI();
+};
+document.getElementById('btn-leave-lobby').onclick = () => {
+  window.location.reload();
+};
+
+// 10. HOST LAPTOP TERMINAL HANDLER
+function openHostLaptopTerminal() {
+  const modal = document.getElementById('laptop-modal');
+  modal.style.display = 'flex';
+
+  const table = document.getElementById('laptop-player-table');
+  table.innerHTML = `<div><b>${document.getElementById('prof-name').value} (Host)</b> - Stats: Escapes ${GameState.playerStats.escapes} | Deaths ${GameState.playerStats.deaths}</div>`;
+
+  Object.values(NetworkEngine.peers).forEach((p, idx) => {
+    table.innerHTML += `<div><b>${p.name || 'Survivor ' + (idx + 1)}</b> - Connected (Ping: 45ms)</div>`;
+  });
+}
+document.getElementById('btn-close-laptop').onclick = () => {
+  document.getElementById('laptop-modal').style.display = 'none';
+};
+
+// 11. 3D LOBBY 10-SECOND START COUNTDOWN
+let lobbyCountdownTimer = null;
+let lobbyCountdownVal = 10;
+
+function handleLobbyStartTrigger() {
+  if (!NetworkEngine.isHost || GameState.inGame) return;
+  if (lobbyCountdownTimer) return;
+
+  lobbyCountdownVal = 10;
+  const banner = document.getElementById('lobby-countdown-banner');
+  banner.style.display = 'block';
+  document.getElementById('lobby-countdown-num').innerText = lobbyCountdownVal;
+
+  NetworkEngine.broadcast('LOBBY_COUNTDOWN_START', { val: 10 });
+
+  lobbyCountdownTimer = setInterval(() => {
+    lobbyCountdownVal--;
+    document.getElementById('lobby-countdown-num').innerText = lobbyCountdownVal;
+
+    if (lobbyCountdownVal <= 0) {
+      clearInterval(lobbyCountdownTimer);
+      lobbyCountdownTimer = null;
+      banner.style.display = 'none';
+      NetworkEngine.broadcast('HOST_LAUNCH_MANOR', {});
+      launchManorGame();
+    }
+  }, 1000);
+}
+
+function cancelLobbyCountdown() {
+  if (lobbyCountdownTimer) {
+    clearInterval(lobbyCountdownTimer);
+    lobbyCountdownTimer = null;
+    document.getElementById('lobby-countdown-banner').style.display = 'none';
+    showPrompt('Player joined/left! Start countdown canceled.');
+  }
+}
+
+// 12. MULTIPLAYER NETWORKING ENGINE
+const NetworkEngine = {
+  client: null,
+  isHost: false,
+  myId: 'survivor_' + Math.random().toString(36).substring(2, 9),
+  roomCode: '',
+  roomName: '',
+  maxPlayers: 8,
+  peers: {},
+
+  init(scene) {
+    const pill = document.getElementById('net-status-pill');
+    try {
+      this.client = new Paho.MQTT.Client('broker.hivemq.com', 8884, this.myId);
+      this.client.onConnectionLost = () => {
+        pill.innerText = 'STATUS: RECONNECTING TO CLUSTER...';
+        pill.style.color = '#ffaa00';
+        setTimeout(() => this.init(scene), 3000);
+      };
+      this.client.onMessageArrived = (msg) => {
+        this.handlePacket(scene, msg.destinationName, JSON.parse(msg.payloadString));
+      };
+      this.client.connect({
+        useSSL: true,
+        timeout: 6,
+        onSuccess: () => {
+          pill.innerText = '● CONNECTED TO GLOBAL MULTIPLAYER (Live Across Devices)';
+          pill.style.color = '#00ffaa';
+          this.client.subscribe('granny_v5_lobbies/#');
+        }
+      });
+    } catch (e) {}
+  },
+
+  broadcast(topic, data) {
+    if (this.client && this.client.isConnected()) {
+      const msg = new Paho.MQTT.Message(JSON.stringify(data));
+      msg.destinationName = topic;
+      this.client.send(msg);
+    }
+  },
+
+  broadcastKill(targetId) {
+    this.broadcast(`granny_v5_room/${this.roomCode}`, {
+      type: 'PLAYER_KILLED',
+      target: targetId,
+      corpsePos: Player.position
+    });
+  },
+
+  handlePacket(scene, topic, data) {
+    if (data.sender === this.myId) return;
+
+    if (topic === 'granny_v5_lobbies/announce') {
+      renderLobbyCard(data);
+    } else if (topic === 'granny_v5_lobbies/query' && this.isHost) {
+      this.announce();
+    } else if (topic === `granny_v5_room/${this.roomCode}`) {
+      if (data.type === 'JOIN') {
+        cancelLobbyCountdown();
+        this.peers[data.sender] = { name: data.name, wardrobe: data.wardrobe, pos: new THREE.Vector3() };
+        updateVoteUI();
+        if (this.isHost) this.announce();
+      } else if (data.type === 'LEAVE') {
+        cancelLobbyCountdown();
+        delete this.peers[data.sender];
+        updateVoteUI();
+      } else if (data.type === 'LOBBY_COUNTDOWN_START') {
+        const b = document.getElementById('lobby-countdown-banner');
+        b.style.display = 'block';
+        document.getElementById('lobby-countdown-num').innerText = data.val;
+      } else if (data.type === 'HOST_LAUNCH_MANOR') {
+        launchManorGame();
+      } else if (data.type === 'SYNC') {
+        this.updateRemoteSurvivor(scene, data.sender, data);
+      } else if (data.type === 'PLAYER_KILLED') {
+        if (data.target === this.myId) {
+          Player.becomeGhost(data.corpsePos);
+          audio.playBatHit();
+        }
+      } else if (data.type === 'VOTE_RESTART') {
+        GameState.restartVotes = data.count;
+        updateVoteUI();
+      }
+    }
+  },
+
+  announce() {
+    this.broadcast('granny_v5_lobbies/announce', {
+      code: this.roomCode,
+      name: this.roomName,
+      count: Object.keys(this.peers).length + 1,
+      max: this.maxPlayers
+    });
+  },
+
+  updateRemoteSurvivor(scene, id, data) {
+    if (!this.peers[id] || !this.peers[id].mesh) {
+      const g = new THREE.Group();
+      const bodyMat = new THREE.MeshStandardMaterial({ color: data.wardrobe ? data.wardrobe.shirt : 0x335577 });
+      const body = new THREE.Mesh(new THREE.CylinderGeometry(0.3, 0.3, 1.1, 8), bodyMat);
+      body.position.y = 0.9;
+      g.add(body);
+
+      const headMat = new THREE.MeshStandardMaterial({ color: data.wardrobe ? data.wardrobe.skin : 0xd8b28a });
+      const head = new THREE.Mesh(new THREE.SphereGeometry(0.24, 8, 8), headMat);
+      head.position.y = 1.65;
+      g.add(head);
+
+      // 3D Floating Nameplate
+      const nameSprite = createNameplate(data.name || 'Survivor');
+      nameSprite.position.y = 2.15;
+      g.add(nameSprite);
+
+      scene.add(g);
+      this.peers[id] = { mesh: g, name: data.name, isGhost: false };
+    }
+
+    const p = this.peers[id];
+    if (p.mesh) {
+      if (data.isGhost) {
+        p.mesh.visible = false; // Ghosts are completely invisible to living players!
+        return;
+      }
+      p.mesh.position.set(data.x, data.y, data.z);
+      p.mesh.rotation.y = data.rotY;
+
+      if (Player.position.distanceTo(p.mesh.position) < 0.8 && !Player.isGhost) {
+        const push = new THREE.Vector3().subVectors(Player.position, p.mesh.position).normalize().multiplyScalar(0.08);
+        Player.position.add(push);
+      }
+    }
+  },
+
+  tickSync() {
+    if (this.roomCode) {
+      this.broadcast(`granny_v5_room/${this.roomCode}`, {
+        type: 'SYNC',
+        sender: this.myId,
+        name: document.getElementById('prof-name').value,
+        x: Player.position.x,
+        y: Player.position.y,
+        z: Player.position.z,
+        rotY: Player.rotation.y,
+        isGhost: Player.isGhost,
+        wardrobe: {
+          shirt: document.getElementById('wardrobe-shirt').value,
+          skin: document.getElementById('wardrobe-skin').value
+        }
+      });
+    }
+  }
+};
+
+function createNameplate(text) {
+  const c = document.createElement('canvas'); c.width = 256; c.height = 64;
+  const ctx = c.getContext('2d');
+  ctx.fillStyle = 'rgba(0,0,0,0.6)'; ctx.fillRect(0, 0, 256, 64);
+  ctx.fillStyle = '#ffffff'; ctx.font = 'bold 24px monospace'; ctx.textAlign = 'center';
+  ctx.fillText(text, 128, 42);
+  const tex = new THREE.CanvasTexture(c);
+  return new THREE.Sprite(new THREE.SpriteMaterial({ map: tex }));
+}
+
+function spawnDeadCorpseMesh(scene, pos) {
+  const corpse = new THREE.Group();
+  const cMat = new THREE.MeshStandardMaterial({ color: 0x444444 });
+  const body = new THREE.Mesh(new THREE.BoxGeometry(0.5, 0.25, 1.4), cMat);
+  body.position.y = 0.12;
+  corpse.add(body);
+  const head = new THREE.Mesh(new THREE.SphereGeometry(0.2, 8, 8), Assets.skinMat);
+  head.position.set(0, 0.15, 0.85);
+  corpse.add(head);
+  corpse.position.copy(pos);
+  scene.add(corpse);
+}
+
+// 13. GAME START & LOBBY DISPATCHER
+function launchManorGame() {
+  GameState.inGame = true;
+  document.getElementById('main-menu').style.display = 'none';
+
+  // Choose Granny Player (GP) if enabled and 5+ players
+  const total = Object.keys(NetworkEngine.peers).length + 1;
+  if (total >= 5 && document.getElementById('mp-enable-gp').checked) {
+    const allIds = [NetworkEngine.myId, ...Object.keys(NetworkEngine.peers)];
+    const chosenGP = allIds[Math.floor(Math.random() * allIds.length)];
+    if (chosenGP === NetworkEngine.myId) {
+      setupAsGrannyPlayer();
+      return;
+    }
+  }
+
+  // Survivor Launch
+  document.getElementById('role-badge').style.display = 'block';
+  document.getElementById('role-badge').innerText = 'ROLE: SURVIVOR';
+
+  // Survivors spawn in manor
+  showDaySequence();
+}
+
+function setupAsGrannyPlayer() {
+  GameState.isGP = true;
+  document.getElementById('role-badge').style.display = 'block';
+  document.getElementById('role-badge').innerText = 'ROLE: GRANNY (HUNTER)';
+  document.getElementById('role-badge').style.background = '#8a0303';
+
+  // 10-Second Sleep Nap Countdown
+  const napOverlay = document.getElementById('gp-nap-overlay');
+  napOverlay.style.display = 'flex';
+  let napSecs = 10;
+  document.getElementById('gp-countdown-timer').innerText = napSecs;
+
+  const napInterval = setInterval(() => {
+    napSecs--;
+    document.getElementById('gp-countdown-timer').innerText = napSecs;
+    if (napSecs <= 0) {
+      clearInterval(napInterval);
+      napOverlay.style.display = 'none';
+
+      // Spawn GP in Basement holding the bat
+      Player.position.set(-7.0, -5.8, -6.0);
+      Viewmodel.setHeldItem('GP_Bat');
+      document.getElementById('hud').style.display = 'block';
+      showPrompt('You woke up! Hunt down all survivors with your bat [LMB / FIRE]!');
+    }
+  }, 1000);
+}
+
+// 14. SETTINGS CONTROLLER (FPS SLIDER 1-1200, UI SCALE 50%-150%)
 const SettingsEngine = {
   init(renderer, camera, scene) {
+    // Functional FPS Slider (1 - 1200 FPS)
+    const fpsSlider = document.getElementById('opt-fps-slider');
+    fpsSlider.oninput = (e) => {
+      const v = parseInt(e.target.value);
+      EngineLimiter.targetFPS = v;
+      EngineLimiter.frameInterval = 1000 / v;
+      document.getElementById('opt-fps-val').innerText = `${v} FPS`;
+    };
+
+    // Functional UI Scale Slider (50% - 150%)
+    const uiSlider = document.getElementById('opt-uiscale');
+    uiSlider.oninput = (e) => {
+      const scale = parseFloat(e.target.value);
+      document.documentElement.style.setProperty('--ui-scale', scale);
+      document.getElementById('opt-uiscale-val').innerText = `${Math.round(scale * 100)}%`;
+    };
+
     const fovEl = document.getElementById('opt-fov');
     fovEl.oninput = (e) => {
       camera.fov = parseFloat(e.target.value);
@@ -1178,7 +1601,7 @@ const SettingsEngine = {
     gammaEl.oninput = (e) => {
       const v = parseFloat(e.target.value);
       scene.children.forEach(c => {
-        if (c.isAmbientLight) c.intensity = 0.28 * v;
+        if (c.isAmbientLight) c.intensity = 0.35 * v;
       });
       document.getElementById('opt-gamma-val').innerText = `${v.toFixed(1)}`;
     };
@@ -1241,155 +1664,33 @@ const SettingsEngine = {
   }
 };
 
-// 10. MULTIPLAYER NETWORKING
-const NetworkEngine = {
-  client: null,
-  isHost: false,
-  myId: 'survivor_' + Math.random().toString(36).substring(2, 9),
-  roomCode: '',
-  roomName: '',
-  maxPlayers: 8,
-  peers: {},
-
-  init(scene) {
-    const pill = document.getElementById('net-status-pill');
-    try {
-      this.client = new Paho.MQTT.Client('broker.hivemq.com', 8884, this.myId);
-      this.client.onConnectionLost = () => {
-        pill.innerText = 'STATUS: RECONNECTING TO CLUSTER...';
-        pill.style.color = '#ffaa00';
-        setTimeout(() => this.init(scene), 3000);
-      };
-      this.client.onMessageArrived = (msg) => {
-        this.handlePacket(scene, msg.destinationName, JSON.parse(msg.payloadString));
-      };
-      this.client.connect({
-        useSSL: true,
-        timeout: 6,
-        onSuccess: () => {
-          pill.innerText = '● CONNECTED TO GLOBAL MULTIPLAYER (Live Across Devices)';
-          pill.style.color = '#00ffaa';
-          this.client.subscribe('granny_v4_lobbies/#');
-        }
-      });
-    } catch (e) {}
-  },
-
-  broadcast(topic, data) {
-    if (this.client && this.client.isConnected()) {
-      const msg = new Paho.MQTT.Message(JSON.stringify(data));
-      msg.destinationName = topic;
-      this.client.send(msg);
-    }
-  },
-
-  handlePacket(scene, topic, data) {
-    if (data.sender === this.myId) return;
-
-    if (topic === 'granny_v4_lobbies/announce') {
-      renderLobbyCard(data);
-    } else if (topic === 'granny_v4_lobbies/query' && this.isHost) {
-      this.announce();
-    } else if (topic === `granny_v4_room/${this.roomCode}`) {
-      if (data.type === 'JOIN') {
-        this.peers[data.sender] = { name: data.name, wardrobe: data.wardrobe, pos: new THREE.Vector3() };
-        updateRoomUI();
-        if (this.isHost) this.announce();
-      } else if (data.type === 'START') {
-        startGame();
-      } else if (data.type === 'SYNC') {
-        this.updateRemoteSurvivor(scene, data.sender, data);
-      } else if (data.type === 'SHOT') {
-        const hitPos = new THREE.Vector3(data.x, data.y, data.z);
-        if (Player.position.distanceTo(hitPos) < 2.2) {
-          Player.takeDamage(data.dmg);
-          showPrompt(`Hit by friendly fire ${data.weapon}! -${data.dmg} HP`);
-        }
-      }
-    }
-  },
-
-  announce() {
-    this.broadcast('granny_v4_lobbies/announce', {
-      code: this.roomCode,
-      name: this.roomName,
-      count: Object.keys(this.peers).length + 1,
-      max: this.maxPlayers
-    });
-  },
-
-  updateRemoteSurvivor(scene, id, data) {
-    if (!this.peers[id] || !this.peers[id].mesh) {
-      const g = new THREE.Group();
-      const bodyMat = new THREE.MeshStandardMaterial({ color: data.wardrobe ? data.wardrobe.shirt : 0x335577 });
-      const body = new THREE.Mesh(new THREE.CylinderGeometry(0.3, 0.3, 1.1, 8), bodyMat);
-      body.position.y = 0.9;
-      g.add(body);
-
-      const headMat = new THREE.MeshStandardMaterial({ color: data.wardrobe ? data.wardrobe.skin : 0xd8b28a });
-      const head = new THREE.Mesh(new THREE.SphereGeometry(0.24, 8, 8), headMat);
-      head.position.y = 1.65;
-      g.add(head);
-
-      scene.add(g);
-      this.peers[id] = { mesh: g, name: data.name };
-    }
-
-    const p = this.peers[id];
-    if (p.mesh) {
-      p.mesh.position.set(data.x, data.y, data.z);
-      p.mesh.rotation.y = data.rotY;
-
-      if (Player.position.distanceTo(p.mesh.position) < 0.8) {
-        const push = new THREE.Vector3().subVectors(Player.position, p.mesh.position).normalize().multiplyScalar(0.08);
-        Player.position.add(push);
-      }
-    }
-  },
-
-  sendShot(origin, dir, dmg, weapon) {
-    if (GameState.mode === 'mp') {
-      const hitTarget = origin.clone().add(dir.multiplyScalar(8));
-      this.broadcast(`granny_v4_room/${this.roomCode}`, {
-        type: 'SHOT',
-        sender: this.myId,
-        x: hitTarget.x, y: hitTarget.y, z: hitTarget.z,
-        dmg, weapon
-      });
-    }
-  },
-
-  tickSync() {
-    if (GameState.mode === 'mp' && this.roomCode) {
-      this.broadcast(`granny_v4_room/${this.roomCode}`, {
-        type: 'SYNC',
-        sender: this.myId,
-        name: document.getElementById('prof-name').value,
-        x: Player.position.x,
-        y: Player.position.y,
-        z: Player.position.z,
-        rotY: Player.rotation.y,
-        wardrobe: {
-          shirt: document.getElementById('wardrobe-shirt').value,
-          skin: document.getElementById('wardrobe-skin').value
-        }
-      });
-    }
-  }
+// 15. MAIN RUNTIME LOOP & THROTTLED 1-1200 FPS CONTROLLER
+const GameState = {
+  mode: 'sp',
+  difficulty: 'normal',
+  day: 1,
+  maxDays: 5,
+  inGame: false,
+  isGP: false,
+  funMode: false,
+  restartVotes: 0,
+  playerStats: { escapes: 0, deaths: 0, stuns: 0, days: 0 }
 };
 
-// 11. RUNTIME INITIALIZATION & OPTIMIZED 120 FPS ENGINE LOOP
-const GameState = { mode: 'sp', difficulty: 'normal', day: 1, maxDays: 5 };
+const EngineLimiter = {
+  targetFPS: 120,
+  frameInterval: 1000 / 120,
+  lastFrameTime: performance.now()
+};
 
 const canvasContainer = document.getElementById('canvas-container');
 const scene = new THREE.Scene();
 scene.background = new THREE.Color(0x040404);
 scene.fog = new THREE.FogExp2(0x040404, 0.07);
 
-const camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 70);
+const camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 80);
 scene.add(camera);
 
-// High-performance WebGL settings
 const renderer = new THREE.WebGLRenderer({ antialias: false, powerPreference: 'high-performance' });
 renderer.setSize(window.innerWidth, window.innerHeight);
 renderer.setPixelRatio(Math.min(window.devicePixelRatio, 1.5));
@@ -1400,25 +1701,13 @@ canvasContainer.appendChild(renderer.domElement);
 const ambLight = new THREE.AmbientLight(0x353535);
 scene.add(ambLight);
 
-// Optimized room point lights (shadow map depth rendering disabled for FPS)
-const bedroomLamp = new THREE.PointLight(0xffaa44, 1.0, 14);
-bedroomLamp.position.set(-8, 9.5, 8);
-scene.add(bedroomLamp);
-
-const foyerLamp = new THREE.PointLight(0xffdd99, 0.9, 18);
-foyerLamp.position.set(0, 4.2, 8);
-scene.add(foyerLamp);
-
-const basementLight = new THREE.PointLight(0x44bb77, 0.8, 16);
-basementLight.position.set(-4, -3.5, -4);
-scene.add(basementLight);
-
 House.build(scene);
 Player.init(camera, scene);
 MonsterAI.init(scene);
 Input.init(canvasContainer, camera, scene);
 NetworkEngine.init(scene);
 SettingsEngine.init(renderer, camera, scene);
+CareerStats.load();
 
 const showScreen = (id) => {
   ['main-menu', 'sp-modal', 'mp-modal', 'wardrobe-modal', 'settings-modal'].forEach(s => {
@@ -1439,50 +1728,62 @@ document.getElementById('settings-back').onclick = () => showScreen('main-menu')
 document.getElementById('sp-start').onclick = () => {
   GameState.mode = 'sp';
   GameState.difficulty = document.getElementById('sp-diff').value;
-  MonsterAI.applyDifficultySettings();
-  startGame();
-};
+  GameState.funMode = document.getElementById('sp-funmode').checked;
 
-function startGame() {
+  if (GameState.funMode) {
+    document.getElementById('m-btn-spawn').style.display = 'flex';
+    document.getElementById('m-btn-up').style.display = 'flex';
+    document.getElementById('m-btn-down').style.display = 'flex';
+  }
+
+  MonsterAI.applyDifficultySettings();
   audio.init();
   showScreen('');
   showDaySequence();
-}
+};
 
-document.getElementById('btn-show-create-lobby').onclick = () => {
-  document.getElementById('mp-create-box').style.display = 'block';
-};
 document.getElementById('mp-max-players').oninput = (e) => {
-  document.getElementById('mp-max-players-val').innerText = e.target.value;
+  const v = parseInt(e.target.value);
+  document.getElementById('mp-max-players-val').innerText = v;
+  document.getElementById('row-player-granny').style.display = (v >= 5) ? 'flex' : 'none';
 };
+
 document.getElementById('btn-commit-create-lobby').onclick = () => {
   NetworkEngine.isHost = true;
   NetworkEngine.roomCode = 'SAH-' + Math.floor(10 + Math.random() * 89);
-  NetworkEngine.roomName = document.getElementById('mp-room-name').value;
+  NetworkEngine.roomName = document.getElementById('mp-room-name').value.trim();
   NetworkEngine.maxPlayers = parseInt(document.getElementById('mp-max-players').value);
 
-  document.getElementById('mp-lobby-browser').style.display = 'none';
-  document.getElementById('mp-create-box').style.display = 'none';
-  document.getElementById('mp-lobby-room').style.display = 'block';
-  document.getElementById('room-header').innerText = `LOBBY: ${NetworkEngine.roomName}`;
-  document.getElementById('room-code-display').innerText = NetworkEngine.roomCode;
+  // Check if room name activates Fun Mode
+  if (NetworkEngine.roomName.toUpperCase() === 'FUN TIME') {
+    GameState.funMode = true;
+    document.getElementById('m-btn-spawn').style.display = 'flex';
+    document.getElementById('m-btn-up').style.display = 'flex';
+    document.getElementById('m-btn-down').style.display = 'flex';
+  }
 
-  NetworkEngine.client.subscribe(`granny_v4_room/${NetworkEngine.roomCode}`);
+  showScreen('');
+  NetworkEngine.client.subscribe(`granny_v5_room/${NetworkEngine.roomCode}`);
   NetworkEngine.announce();
-  updateRoomUI();
+
+  // Host spawns inside 3D Lobby
+  Player.position.set(60.0, 30.0, 2.0);
+  document.getElementById('hud').style.display = 'block';
+  showPrompt('Spawned in 3D Lobby! Press [Enter] to start, or [E] on laptop for settings.');
 };
+
 document.getElementById('btn-sync-lobbies').onclick = () => {
   document.getElementById('lobbies-list').innerHTML = '<div style="color:#aaa;">Scanning for active lobbies...</div>';
-  NetworkEngine.broadcast('granny_v4_lobbies/query', { sender: NetworkEngine.myId });
+  NetworkEngine.broadcast('granny_v5_lobbies/query', { sender: NetworkEngine.myId });
 };
+
 document.getElementById('btn-join-code').onclick = () => {
   const code = document.getElementById('mp-direct-code').value.trim().toUpperCase();
   if (code.length >= 4) {
     NetworkEngine.roomCode = code;
-    document.getElementById('mp-lobby-browser').style.display = 'none';
-    document.getElementById('mp-lobby-room').style.display = 'block';
-    NetworkEngine.client.subscribe(`granny_v4_room/${code}`);
-    NetworkEngine.broadcast(`granny_v4_room/${code}`, {
+    showScreen('');
+    NetworkEngine.client.subscribe(`granny_v5_room/${code}`);
+    NetworkEngine.broadcast(`granny_v5_room/${code}`, {
       type: 'JOIN',
       sender: NetworkEngine.myId,
       name: document.getElementById('prof-name').value,
@@ -1491,7 +1792,10 @@ document.getElementById('btn-join-code').onclick = () => {
         skin: document.getElementById('wardrobe-skin').value
       }
     });
-    updateRoomUI();
+    // Joiner spawns inside 3D Lobby
+    Player.position.set(60.0, 30.0, 2.0);
+    document.getElementById('hud').style.display = 'block';
+    showPrompt('Entered 3D Waiting Room! Waiting for host to start...');
   }
 };
 
@@ -1512,14 +1816,9 @@ function renderLobbyCard(data) {
 
   div.querySelector('button').onclick = () => {
     NetworkEngine.roomCode = data.code;
-    NetworkEngine.roomName = data.name;
-    document.getElementById('mp-lobby-browser').style.display = 'none';
-    document.getElementById('mp-lobby-room').style.display = 'block';
-    document.getElementById('room-header').innerText = `LOBBY: ${data.name}`;
-    document.getElementById('room-code-display').innerText = data.code;
-
-    NetworkEngine.client.subscribe(`granny_v4_room/${data.code}`);
-    NetworkEngine.broadcast(`granny_v4_room/${data.code}`, {
+    showScreen('');
+    NetworkEngine.client.subscribe(`granny_v5_room/${data.code}`);
+    NetworkEngine.broadcast(`granny_v5_room/${data.code}`, {
       type: 'JOIN',
       sender: NetworkEngine.myId,
       name: document.getElementById('prof-name').value,
@@ -1528,45 +1827,27 @@ function renderLobbyCard(data) {
         skin: document.getElementById('wardrobe-skin').value
       }
     });
-    updateRoomUI();
+    Player.position.set(60.0, 30.0, 2.0);
+    document.getElementById('hud').style.display = 'block';
   };
 
   list.appendChild(div);
 }
 
-function updateRoomUI() {
-  const count = Object.keys(NetworkEngine.peers).length + 1;
-  document.getElementById('room-player-count').innerText = count;
-  const list = document.getElementById('room-player-list');
-  list.innerHTML = `<li>${document.getElementById('prof-name').value} (You)</li>`;
-
-  Object.values(NetworkEngine.peers).forEach(p => {
-    list.innerHTML += `<li>${p.name || 'Survivor'}</li>`;
-  });
-
-  if (NetworkEngine.isHost && count >= 2) {
-    document.getElementById('btn-start-multiplayer-game').style.display = 'block';
-    document.getElementById('waiting-msg').style.display = 'none';
-  }
-}
-
-document.getElementById('btn-start-multiplayer-game').onclick = () => {
-  NetworkEngine.broadcast(`granny_v4_room/${NetworkEngine.roomCode}`, {
-    type: 'START',
-    sender: NetworkEngine.myId
-  });
-  startGame();
-};
-
-// 12. RUNTIME TICKING & 60-120 FPS MASTER LOOP
-let lastTime = performance.now();
+// 16. THROTTLED 1-1200 FPS GAME ENGINE LOOP
 setInterval(() => { NetworkEngine.tickSync(); }, 50);
 
 function gameLoop() {
   requestAnimationFrame(gameLoop);
+
   const now = performance.now();
-  const dt = Math.min((now - lastTime) / 1000, 0.033);
-  lastTime = now;
+  const elapsed = now - EngineLimiter.lastFrameTime;
+
+  // FPS Limiter: Throttles to exact targetFPS (1 - 1200 FPS)
+  if (elapsed < EngineLimiter.frameInterval) return;
+  EngineLimiter.lastFrameTime = now - (elapsed % EngineLimiter.frameInterval);
+
+  const dt = Math.min(elapsed / 1000, 0.05);
 
   Player.update(dt, camera);
   MonsterAI.update(dt);
