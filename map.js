@@ -1,5 +1,6 @@
 /* =========================================================================
-   MAP.JS - 1:1 MANOR BLUEPRINT, SEAMLESS FLOORS (NO GAPS), 3D DRAWERS & PROPS
+   MAP.JS - 1:1 BLUEPRINT MANOR, 3D AMONG US LOBBY, 7 RANDOM SPAWN PRESETS,
+   REAL 3D HOLLOW DRAWERS, KNOCK-DOWN PAINTINGS & ACCURATE BASEMENT STAIRS
    ========================================================================= */
 
 const Assets = {
@@ -11,13 +12,17 @@ const Assets = {
   bloodMat: null,
   blanketMat: null,
   frameMat: null,
+  posterMat: null,
+  elephantMat: null,
+  screenMat: null,
 
   init() {
+    // 1. Wood Plank Texture
     const makeWoodTexture = () => {
       const c = document.createElement('canvas'); c.width = 256; c.height = 256;
       const ctx = c.getContext('2d');
-      ctx.fillStyle = '#2d1c12'; ctx.fillRect(0, 0, 256, 256);
-      ctx.strokeStyle = '#180f08';
+      ctx.fillStyle = '#2c1b11'; ctx.fillRect(0, 0, 256, 256);
+      ctx.strokeStyle = '#180e07';
       for (let i = 0; i < 32; i++) {
         ctx.lineWidth = 1 + Math.random() * 2;
         ctx.beginPath();
@@ -29,6 +34,7 @@ const Assets = {
       return new THREE.CanvasTexture(c);
     };
 
+    // 2. Grimy Wallpaper Texture
     const makeWallpaperTexture = () => {
       const c = document.createElement('canvas'); c.width = 256; c.height = 256;
       const ctx = c.getContext('2d');
@@ -42,14 +48,34 @@ const Assets = {
       return new THREE.CanvasTexture(c);
     };
 
+    // 3. "Tung Tung Tung Sahur" Poster Texture for Lobby
+    const makePosterTexture = () => {
+      const c = document.createElement('canvas'); c.width = 256; c.height = 320;
+      const ctx = c.getContext('2d');
+      ctx.fillStyle = '#111'; ctx.fillRect(0, 0, 256, 320);
+      ctx.fillStyle = '#8a0303'; ctx.fillRect(10, 10, 236, 300);
+      ctx.fillStyle = '#fff'; ctx.font = 'bold 20px monospace'; ctx.textAlign = 'center';
+      ctx.fillText('TUNG TUNG TUNG', 128, 50);
+      ctx.fillText('SAHUR!', 128, 80);
+      // Drum graphic silhouette
+      ctx.fillStyle = '#3a2010';
+      ctx.fillRect(68, 110, 120, 140);
+      ctx.fillStyle = '#e60000'; ctx.font = 'bold 16px monospace';
+      ctx.fillText('WAKE UP!', 128, 280);
+      return new THREE.CanvasTexture(c);
+    };
+
     this.woodMat = new THREE.MeshStandardMaterial({ map: makeWoodTexture(), roughness: 0.85 });
     this.wallMat = new THREE.MeshStandardMaterial({ map: makeWallpaperTexture(), roughness: 0.92 });
-    this.concreteMat = new THREE.MeshStandardMaterial({ color: 0x2a2a2a, roughness: 0.95 });
+    this.concreteMat = new THREE.MeshStandardMaterial({ color: 0x282828, roughness: 0.95 });
     this.metalMat = new THREE.MeshStandardMaterial({ color: 0x888888, metalness: 0.8, roughness: 0.3 });
     this.skinMat = new THREE.MeshStandardMaterial({ color: 0xb5a088, roughness: 0.8 });
     this.bloodMat = new THREE.MeshStandardMaterial({ color: 0x6e0505, roughness: 0.5 });
     this.blanketMat = new THREE.MeshStandardMaterial({ color: 0x5a1818, roughness: 0.9 });
     this.frameMat = new THREE.MeshStandardMaterial({ color: 0x1f140e, roughness: 0.8 });
+    this.posterMat = new THREE.MeshStandardMaterial({ map: makePosterTexture(), roughness: 0.5 });
+    this.elephantMat = new THREE.MeshStandardMaterial({ color: 0x5c5c63, roughness: 0.85 });
+    this.screenMat = new THREE.MeshBasicMaterial({ color: 0x00ffaa });
   }
 };
 Assets.init();
@@ -85,6 +111,7 @@ const House = {
   drawers: [],
   dynamicProps: [],
   physicsItems: [],
+  paintings: [],
   locks: {
     planks: 2,
     padlock: true,
@@ -106,41 +133,67 @@ const House = {
       return mesh;
     };
 
-    // --- 1. CONTINUOUS SOLID FLOORS (ZERO GAPS / ZERO HOLES) ---
+    // =========================================================================
+    // SECTION A: 3D AMONG US-STYLE MULTIPLAYER LOBBY ROOM (ISOLATED OFF-MANOR)
+    // =========================================================================
+    const lobbyY = 30.0;
+    // Lobby Floor & Ceiling ($14 \times 14\text{m}$)
+    makeSolidBox(16, 0.4, 16, 60.0, lobbyY - 0.2, 0.0, Assets.concreteMat);
+    makeSolidBox(16, 0.4, 16, 60.0, lobbyY + 5.0, 0.0, Assets.woodMat);
+    // Lobby Walls
+    makeSolidBox(16, 5.0, 0.4, 60.0, lobbyY + 2.5, -8.0, Assets.wallMat, true);
+    makeSolidBox(16, 5.0, 0.4, 60.0, lobbyY + 2.5, 8.0, Assets.wallMat, true);
+    makeSolidBox(0.4, 5.0, 16, 52.0, lobbyY + 2.5, 0.0, Assets.wallMat, true);
+    makeSolidBox(0.4, 5.0, 16, 68.0, lobbyY + 2.5, 0.0, Assets.wallMat, true);
+
+    // Posters of "Tung Tung Tung Sahur" on Lobby Walls
+    const poster1 = new THREE.Mesh(new THREE.BoxGeometry(1.6, 2.0, 0.05), Assets.posterMat);
+    poster1.position.set(58.0, lobbyY + 2.6, -7.75);
+    scene.add(poster1);
+    const poster2 = poster1.clone();
+    poster2.position.set(62.0, lobbyY + 2.6, -7.75);
+    scene.add(poster2);
+
+    // Big 3D Elephant in Center of Room with "ADDRESS ME!" Plaque
+    this.buildLobbyElephant(scene, 60.0, lobbyY, 0.0);
+
+    // Interactive Wardrobe Closet in Lobby Room
+    this.buildLobbyWardrobe(scene, 53.2, lobbyY, -5.0);
+
+    // Host Laptop Terminal Table in Lobby Room
+    this.buildHostLaptopTable(scene, 66.8, lobbyY, 2.0);
+
+    // =========================================================================
+    // SECTION B: CONTINUOUS MANOR FLOORS (ZERO GAPS / ZERO HOLES)
+    // =========================================================================
     // Basement Floor: Surface is exactly Y = -6.0
     makeSolidBox(36, 0.4, 36, 0, -6.2, 0, Assets.concreteMat);
 
-    // Ground Floor: Surface is exactly Y = 0.0 (Seamless surrounding stairwell cutouts)
-    // Left side & Foyer
+    // Ground Floor: Surface is exactly Y = 0.0 (Seamless surrounding stair openings)
     makeSolidBox(21.2, 0.4, 36, -7.4, -0.2, 0, Assets.woodMat);
-    // Right side
     makeSolidBox(11.2, 0.4, 36, 12.4, -0.2, 0, Assets.woodMat);
-    // Ground Back (Behind stairs)
     makeSolidBox(3.6, 0.4, 21.8, 5.0, -0.2, -7.1, Assets.woodMat);
-    // Ground Front landing
     makeSolidBox(3.6, 0.4, 4.0, 5.0, -0.2, 16.0, Assets.woodMat);
 
-    // Upstairs Floor: Surface is exactly Y = 6.0 (Continuous with only the stairwell opening)
-    // Left side (Entire Starting Bedroom, Bedroom 1, Hallway left)
+    // Upstairs Floor: Surface is exactly Y = 6.0 (Zero floor gaps in hallway/rooms)
     makeSolidBox(21.2, 0.4, 36, -7.4, 5.8, 0, Assets.woodMat);
-    // Right side (Bathroom, Hallway right)
     makeSolidBox(11.2, 0.4, 36, 12.4, 5.8, 0, Assets.woodMat);
-    // Upstairs Back corridor
     makeSolidBox(3.6, 0.4, 21.8, 5.0, 5.8, -7.1, Assets.woodMat);
-    // Upstairs Front landing walkway
     makeSolidBox(3.6, 0.4, 4.0, 5.0, 5.8, 16.0, Assets.woodMat);
 
     // Attic Floor: Surface is exactly Y = 11.5
     makeSolidBox(36, 0.4, 36, 0, 11.3, 0, Assets.woodMat);
 
-    // Perimeter Exterior Walls
+    // Exterior Perimeter Walls
     makeSolidBox(36, 24, 0.6, 0, 3.0, -18, Assets.wallMat, true);
     makeSolidBox(36, 24, 0.6, 0, 3.0, 18, Assets.wallMat, true);
     makeSolidBox(0.6, 24, 36, -18, 3.0, 0, Assets.wallMat, true);
     makeSolidBox(0.6, 24, 36, 18, 3.0, 0, Assets.wallMat, true);
 
-    // --- 2. ACCURATE STAIRCASES (NO GAPS TO SURROUNDING FLOORS) ---
-    // Staircase 1: Ground Floor (0.0) up to Upstairs (6.0)
+    // =========================================================================
+    // SECTION C: ACCURATE BASEMENT & GRAND STAIRCASES (1:1 BLUEPRINT)
+    // =========================================================================
+    // 1. Grand Stairs: Ground Floor ($0.0$) up to Upstairs ($6.0$)
     const steps1 = 15;
     for (let i = 0; i < steps1; i++) {
       const stepH = 0.4;
@@ -149,27 +202,33 @@ const House = {
       makeSolidBox(3.4, stepH, 0.75, 5.0, stepTop - stepH / 2, stepZ, Assets.woodMat);
     }
 
-    // Staircase 2: Ground Floor (0.0) down to Basement (-6.0)
+    // 2. ACCURATE BASEMENT STAIRCASE: Ground Floor ($0.0$) down to Basement ($-6.0$)
+    // Blueprint location: Leads from Ground Hallway ($Z = -0.5$) down to Basement ($Z = -8.5$)
     const steps2 = 15;
     for (let i = 0; i < steps2; i++) {
       const stepH = 0.4;
       const stepTop = -i * (6.0 / steps2);
-      const stepZ = -2.0 - i * 0.75;
-      makeSolidBox(3.2, stepH, 0.78, -5.0, stepTop - stepH / 2, stepZ, Assets.concreteMat);
+      const stepZ = -0.5 - i * 0.55;
+      makeSolidBox(3.2, stepH, 0.6, -4.5, stepTop - stepH / 2, stepZ, Assets.concreteMat);
     }
+    // Basement Staircase Side Enclosure Walls
+    makeSolidBox(0.4, 7.0, 9.0, -6.3, -3.0, -4.5, Assets.wallMat, true);
+    makeSolidBox(0.4, 7.0, 9.0, -2.7, -3.0, -4.5, Assets.wallMat, true);
 
-    // --- 3. UPSTAIRS: STARTING BEDROOM ---
-    // Wall with Door into Hallway
+    // =========================================================================
+    // SECTION D: STARTING BEDROOM & INTERIOR ROOMS
+    // =========================================================================
+    // Bedroom South Wall with Fitted Doorway into Hallway
     this.buildWallWithDoor(scene, -8, 8.8, 2, 14, 5.6, 2.4, 4.4, 'x', {
       doorAngle: 0,
       openAngle: -Math.PI * 0.5,
       hingeLeft: true,
-      doorName: 'Bedroom Door'
+      doorName: 'Starting Bedroom Door'
     });
     // Partition Wall between Bedrooms
     makeSolidBox(0.4, 5.6, 16, -1, 8.8, 10, Assets.wallMat, true);
 
-    // STARTING BED (Hollow underside for hiding)
+    // THE STARTING BED (Hollow Underside for Hiding)
     const bedGroup = new THREE.Group();
     const legGeo = new THREE.BoxGeometry(0.18, 0.8, 0.18);
     const l1 = new THREE.Mesh(legGeo, Assets.woodMat); l1.position.set(-1.6, 0.4, -2.4); bedGroup.add(l1);
@@ -192,7 +251,6 @@ const House = {
     bedGroup.position.set(-9.0, 6.0, 9.5);
     scene.add(bedGroup);
 
-    // Bed top mattress collider only
     CollisionWorld.addBox(-10.8, 6.6, 7.0, -7.2, 8.0, 12.1, true);
 
     this.hidingSpots.push({
@@ -202,33 +260,44 @@ const House = {
       type: 'bed'
     });
 
-    // STARTING ROOM TIPPABLE TABLE + FRAGILE VASE (DETAILED MODEL)
+    // Tippable Bedside Table + Fragile Vase
     this.buildTippableTable(scene, -4.5, 6.0, 8.5);
 
-    // DRESSER WITH 3D CAVITY DRAWERS THAT HOLD ITEMS
+    // Dresser with 3D Hollow-Cavity Drawers
     this.buildDresserWithRealDrawers(scene, -3.2, 6.0, 3.8);
 
-    // Wardrobe closet
+    // Wardrobe Closet
     this.buildWardrobeCloset(scene, -13.5, 6.0, 5.0);
 
-    // --- 4. HIDDEN PAINTING & SECRET AREA ---
-    const painting = new THREE.Mesh(new THREE.BoxGeometry(2.4, 2.6, 0.15), Assets.woodMat);
-    painting.position.set(4.0, 8.8, -7.8);
-    scene.add(painting);
+    // KNOCK-DOWN WALL PAINTINGS (FALL & CLATTER WHEN BUMPED)
+    this.buildKnockdownPainting(scene, -8.0, 8.5, 2.22, 0);       // Bedroom South Wall
+    this.buildKnockdownPainting(scene, -1.22, 8.5, 7.0, Math.PI * 0.5); // Bedroom Partition Wall
+    this.buildKnockdownPainting(scene, -7.0, 2.5, 17.65, 0);     // Foyer Wall
+
+    // DYNAMIC PUSHABLE CHAIRS
+    this.buildPushableChair(scene, -6.0, 0.0, 8.0);
+    this.buildPushableChair(scene, -8.0, 0.0, -2.0);
+
+    // Hidden Painting Door to Secret Room
+    const secretPainting = new THREE.Mesh(new THREE.BoxGeometry(2.4, 2.6, 0.15), Assets.woodMat);
+    secretPainting.position.set(4.0, 8.8, -7.8);
+    scene.add(secretPainting);
 
     let paintingOpen = false;
     this.interactables.push({
-      mesh: painting,
-      prompt: '[E] Slide Painting',
+      mesh: secretPainting,
+      prompt: '[E] Slide Secret Painting',
       action: () => {
         paintingOpen = !paintingOpen;
-        painting.position.x += paintingOpen ? 2.4 : -2.4;
+        secretPainting.position.x += paintingOpen ? 2.4 : -2.4;
         audio.playDoor();
-        return paintingOpen ? 'Opened Secret Passage behind the painting!' : 'Closed picture frame.';
+        return paintingOpen ? 'Opened Secret Passage!' : 'Closed picture frame.';
       }
     });
 
-    // --- 5. GROUND FLOOR: FOYER & 4-TIER FRONT EXIT DOOR ---
+    // =========================================================================
+    // SECTION E: GROUND FOYER FRONT EXIT & BASEMENT GARAGE CAR
+    // =========================================================================
     const frontDoor = new THREE.Mesh(new THREE.BoxGeometry(3.2, 4.8, 0.28), Assets.woodMat);
     frontDoor.position.set(0, 2.4, 17.6);
     scene.add(frontDoor);
@@ -255,9 +324,9 @@ const House = {
             if (this.locks.planks === 1) scene.remove(plank1);
             if (this.locks.planks === 0) scene.remove(plank2);
             audio.playTung();
-            return 'Pried off a wooden barricade plank with the Hammer!';
+            return 'Pried off a barricade plank with the Hammer!';
           }
-          return 'Barricaded by heavy wooden planks. Needs Hammer.';
+          return 'Barricaded by heavy planks. Needs Hammer.';
         }
         if (this.locks.padlock) {
           if (inv.has('Padlock Key')) {
@@ -288,7 +357,7 @@ const House = {
       }
     });
 
-    // --- 6. BASEMENT GARAGE & ESCAPE VEHICLE ---
+    // Escape Car in Garage
     const car = new THREE.Group();
     const carBody = new THREE.Mesh(new THREE.BoxGeometry(4.6, 1.8, 8.2), new THREE.MeshStandardMaterial({ color: 0x223344, roughness: 0.4 }));
     carBody.position.y = 1.0;
@@ -356,62 +425,277 @@ const House = {
       }
     });
 
-    // --- 7. SPAWN ITEMS (ONE KEY IS STORED INSIDE THE DRESSER DRAWER) ---
-    this.spawnPhysicsItem(scene, 'Hammer', new THREE.Vector3(8.0, 0.3, -8.0), 0.3);
-    this.spawnPhysicsItem(scene, 'Keycard', new THREE.Vector3(-11.0, -5.7, 8.0), 0.15);
-    this.spawnPhysicsItem(scene, 'Master Key', new THREE.Vector3(8.0, 11.8, 6.0), 0.15);
-    this.spawnPhysicsItem(scene, 'Spark Plug', new THREE.Vector3(-6.0, 6.3, -1.0), 0.2);
-    this.spawnPhysicsItem(scene, 'Car Battery', new THREE.Vector3(12.0, -5.7, -9.0), 0.4);
-    this.spawnPhysicsItem(scene, 'Gasoline Can', new THREE.Vector3(10.0, -5.7, -5.0), 0.35);
-    this.spawnPhysicsItem(scene, 'Car Key', new THREE.Vector3(-2.0, 0.3, 10.0), 0.15);
-    this.spawnPhysicsItem(scene, 'Tranquilizer Crossbow', new THREE.Vector3(8.0, 6.3, 4.0), 0.4);
-    this.spawnPhysicsItem(scene, 'Shotgun', new THREE.Vector3(-12.0, 0.3, -6.0), 0.45);
+    // =========================================================================
+    // SECTION F: 7 RANDOMIZED ITEM SPAWN PRESETS (1:1 ACCURACY)
+    // =========================================================================
+    this.applyRandomItemPreset(scene);
   },
 
-  // TIPPABLE BEDSIDE TABLE WITH CROSS BRACES & AN ANTIQUE CRACKED VASE
-  buildTippableTable(scene, x, y, z) {
-    const tableGroup = new THREE.Group();
+  // 7 DISTINCT ITEM SPAWN PRESETS
+  applyRandomItemPreset(scene) {
+    const presets = [
+      // Preset 0: Standard Granny Route
+      {
+        'Padlock Key': new THREE.Vector3(-3.2, 6.75, 4.0), // In Dresser Drawer
+        'Master Key': new THREE.Vector3(8.0, 11.8, 6.0),   // In Attic
+        'Hammer': new THREE.Vector3(8.0, 0.3, -8.0),       // In Kitchen
+        'Keycard': new THREE.Vector3(-11.0, -5.7, 8.0),    // In Basement
+        'Spark Plug': new THREE.Vector3(-6.0, 6.3, -1.0),  // In Bedroom 2
+        'Car Battery': new THREE.Vector3(12.0, -5.7, -9.0),// Basement Workroom
+        'Gasoline Can': new THREE.Vector3(10.0, -5.7, -5.0),
+        'Car Key': new THREE.Vector3(-2.0, 0.3, 10.0),     // Foyer Table
+        'Tranquilizer Crossbow': new THREE.Vector3(8.0, 6.3, 4.0),
+        'Shotgun': new THREE.Vector3(-12.0, 0.3, -6.0)
+      },
+      // Preset 1: Attic & Shed Scramble
+      {
+        'Padlock Key': new THREE.Vector3(6.0, 6.3, -7.0),  // Bathroom
+        'Master Key': new THREE.Vector3(-11.0, -5.7, 8.0), // Basement Tunnel
+        'Hammer': new THREE.Vector3(12.0, -5.7, -9.0),     // Basement Shelf
+        'Keycard': new THREE.Vector3(-3.2, 6.75, 4.0),     // In Dresser Drawer
+        'Spark Plug': new THREE.Vector3(8.0, 11.8, 6.0),   // Attic
+        'Car Battery': new THREE.Vector3(8.0, 0.3, -8.0),  // Kitchen
+        'Gasoline Can': new THREE.Vector3(-6.0, 6.3, -1.0),
+        'Car Key': new THREE.Vector3(8.0, 6.3, 4.0),
+        'Tranquilizer Crossbow': new THREE.Vector3(-2.0, 0.3, 10.0),
+        'Shotgun': new THREE.Vector3(10.0, -5.7, -5.0)
+      },
+      // Preset 2: Secret Room Priority
+      {
+        'Padlock Key': new THREE.Vector3(8.0, 11.8, 6.0),  // Attic
+        'Master Key': new THREE.Vector3(-3.2, 6.75, 4.0),  // Dresser Drawer
+        'Hammer': new THREE.Vector3(-2.0, 0.3, 10.0),
+        'Keycard': new THREE.Vector3(8.0, 0.3, -8.0),
+        'Spark Plug': new THREE.Vector3(12.0, -5.7, -9.0),
+        'Car Battery': new THREE.Vector3(-11.0, -5.7, 8.0),
+        'Gasoline Can': new THREE.Vector3(6.0, 6.3, -7.0),
+        'Car Key': new THREE.Vector3(10.0, -5.7, -5.0),
+        'Tranquilizer Crossbow': new THREE.Vector3(-6.0, 6.3, -1.0),
+        'Shotgun': new THREE.Vector3(8.0, 6.3, 4.0)
+      },
+      // Preset 3: Garage Cache
+      {
+        'Padlock Key': new THREE.Vector3(10.0, -5.7, -5.0),
+        'Master Key': new THREE.Vector3(8.0, 0.3, -8.0),
+        'Hammer': new THREE.Vector3(8.0, 11.8, 6.0),
+        'Keycard': new THREE.Vector3(-6.0, 6.3, -1.0),
+        'Spark Plug': new THREE.Vector3(-3.2, 6.75, 4.0), // In Dresser Drawer
+        'Car Battery': new THREE.Vector3(6.0, 6.3, -7.0),
+        'Gasoline Can': new THREE.Vector3(12.0, -5.7, -9.0),
+        'Car Key': new THREE.Vector3(-11.0, -5.7, 8.0),
+        'Tranquilizer Crossbow': new THREE.Vector3(-12.0, 0.3, -6.0),
+        'Shotgun': new THREE.Vector3(-2.0, 0.3, 10.0)
+      },
+      // Preset 4: Kitchen Lockout
+      {
+        'Padlock Key': new THREE.Vector3(-2.0, 0.3, 10.0),
+        'Master Key': new THREE.Vector3(6.0, 6.3, -7.0),
+        'Hammer': new THREE.Vector3(-11.0, -5.7, 8.0),
+        'Keycard': new THREE.Vector3(8.0, 11.8, 6.0),
+        'Spark Plug': new THREE.Vector3(10.0, -5.7, -5.0),
+        'Car Battery': new THREE.Vector3(-3.2, 6.75, 4.0), // In Dresser Drawer
+        'Gasoline Can': new THREE.Vector3(8.0, 0.3, -8.0),
+        'Car Key': new THREE.Vector3(-6.0, 6.3, -1.0),
+        'Tranquilizer Crossbow': new THREE.Vector3(12.0, -5.7, -9.0),
+        'Shotgun': new THREE.Vector3(8.0, 6.3, 4.0)
+      },
+      // Preset 5: Bathroom & Vent Stash
+      {
+        'Padlock Key': new THREE.Vector3(-6.0, 6.3, -1.0),
+        'Master Key': new THREE.Vector3(10.0, -5.7, -5.0),
+        'Hammer': new THREE.Vector3(-3.2, 6.75, 4.0),      // In Dresser Drawer
+        'Keycard': new THREE.Vector3(6.0, 6.3, -7.0),
+        'Spark Plug': new THREE.Vector3(-2.0, 0.3, 10.0),
+        'Car Battery': new THREE.Vector3(8.0, 11.8, 6.0),
+        'Gasoline Can': new THREE.Vector3(-11.0, -5.7, 8.0),
+        'Car Key': new THREE.Vector3(8.0, 0.3, -8.0),
+        'Tranquilizer Crossbow': new THREE.Vector3(10.0, -5.7, -5.0),
+        'Shotgun': new THREE.Vector3(12.0, -5.7, -9.0)
+      },
+      // Preset 6: Extreme Dispersion
+      {
+        'Padlock Key': new THREE.Vector3(12.0, -5.7, -9.0),
+        'Master Key': new THREE.Vector3(-2.0, 0.3, 10.0),
+        'Hammer': new THREE.Vector3(6.0, 6.3, -7.0),
+        'Keycard': new THREE.Vector3(10.0, -5.7, -5.0),
+        'Spark Plug': new THREE.Vector3(8.0, 0.3, -8.0),
+        'Car Battery': new THREE.Vector3(-6.0, 6.3, -1.0),
+        'Gasoline Can': new THREE.Vector3(8.0, 11.8, 6.0),
+        'Car Key': new THREE.Vector3(-3.2, 6.75, 4.0),     // In Dresser Drawer
+        'Tranquilizer Crossbow': new THREE.Vector3(-11.0, -5.7, 8.0),
+        'Shotgun': new THREE.Vector3(-12.0, 0.3, -6.0)
+      }
+    ];
 
-    // Tabletop with bevel
-    const top = new THREE.Mesh(new THREE.BoxGeometry(1.3, 0.1, 1.3), Assets.woodMat);
-    top.position.y = 1.35;
-    tableGroup.add(top);
+    const chosen = presets[Math.floor(Math.random() * presets.length)];
+    for (const [name, pos] of Object.entries(chosen)) {
+      this.spawnPhysicsItem(scene, name, pos);
+    }
+  },
 
-    // Turned wooden legs
-    const legGeo = new THREE.CylinderGeometry(0.045, 0.045, 1.35, 8);
-    const l1 = new THREE.Mesh(legGeo, Assets.woodMat); l1.position.set(0.5, 0.67, 0.5); tableGroup.add(l1);
-    const l2 = new THREE.Mesh(legGeo, Assets.woodMat); l2.position.set(-0.5, 0.67, 0.5); tableGroup.add(l2);
-    const l3 = new THREE.Mesh(legGeo, Assets.woodMat); l3.position.set(0.5, 0.67, -0.5); tableGroup.add(l3);
-    const l4 = new THREE.Mesh(legGeo, Assets.woodMat); l4.position.set(-0.5, 0.67, -0.5); tableGroup.add(l4);
+  // 3D ELEPHANT WITH "ADDRESS ME!" SIGNBOARD IN LOBBY
+  buildLobbyElephant(scene, x, y, z) {
+    const elephant = new THREE.Group();
 
-    // Lower storage shelf board
-    const shelf = new THREE.Mesh(new THREE.BoxGeometry(1.1, 0.05, 1.1), Assets.woodMat);
-    shelf.position.y = 0.35;
-    tableGroup.add(shelf);
+    // Body
+    const body = new THREE.Mesh(new THREE.SphereGeometry(1.6, 12, 10), Assets.elephantMat);
+    body.scale.set(1.1, 0.95, 1.4);
+    body.position.y = 1.9;
+    elephant.add(body);
 
-    // Fragile Porcelain Vase
-    const vase = new THREE.Mesh(new THREE.CylinderGeometry(0.12, 0.18, 0.48, 10), Assets.skinMat);
-    vase.position.set(0, 1.64, 0);
-    tableGroup.add(vase);
+    // Head
+    const head = new THREE.Mesh(new THREE.SphereGeometry(0.9, 10, 10), Assets.elephantMat);
+    head.position.set(0, 2.3, 1.5);
+    elephant.add(head);
 
-    tableGroup.position.set(x, y, z);
-    scene.add(tableGroup);
+    // Trunk
+    const trunk = new THREE.Mesh(new THREE.CylinderGeometry(0.18, 0.08, 1.4, 8), Assets.elephantMat);
+    trunk.rotation.x = -0.3;
+    trunk.position.set(0, 1.3, 2.1);
+    elephant.add(trunk);
 
-    const prop = {
-      type: 'table',
-      group: tableGroup,
-      vaseMesh: vase,
-      isTipped: false,
+    // Ears
+    const earGeo = new THREE.BoxGeometry(0.1, 0.8, 0.8);
+    const leftEar = new THREE.Mesh(earGeo, Assets.elephantMat);
+    leftEar.position.set(-0.95, 2.4, 1.4);
+    leftEar.rotation.y = -0.35;
+    elephant.add(leftEar);
+    const rightEar = leftEar.clone();
+    rightEar.position.x = 0.95;
+    rightEar.rotation.y = 0.35;
+    elephant.add(rightEar);
+
+    // 4 Sturdy Legs
+    const legGeo = new THREE.CylinderGeometry(0.28, 0.28, 1.3, 8);
+    const l1 = new THREE.Mesh(legGeo, Assets.elephantMat); l1.position.set(-0.75, 0.65, 0.8); elephant.add(l1);
+    const l2 = new THREE.Mesh(legGeo, Assets.elephantMat); l2.position.set(0.75, 0.65, 0.8); elephant.add(l2);
+    const l3 = new THREE.Mesh(legGeo, Assets.elephantMat); l3.position.set(-0.75, 0.65, -0.8); elephant.add(l3);
+    const l4 = new THREE.Mesh(legGeo, Assets.elephantMat); l4.position.set(0.75, 0.65, -0.8); elephant.add(l4);
+
+    // Signboard Placard: "ADDRESS ME!"
+    const boardCanvas = document.createElement('canvas'); boardCanvas.width = 256; boardCanvas.height = 96;
+    const bCtx = boardCanvas.getContext('2d');
+    bCtx.fillStyle = '#0a0a0a'; bCtx.fillRect(0, 0, 256, 96);
+    bCtx.fillStyle = '#e60000'; bCtx.font = 'bold 26px monospace'; bCtx.textAlign = 'center';
+    bCtx.fillText('ADDRESS ME!', 128, 58);
+    const boardTex = new THREE.CanvasTexture(boardCanvas);
+
+    const sign = new THREE.Mesh(new THREE.BoxGeometry(1.6, 0.6, 0.08), new THREE.MeshBasicMaterial({ map: boardTex }));
+    sign.position.set(0, 1.1, 2.4);
+    elephant.add(sign);
+
+    elephant.position.set(x, y, z);
+    scene.add(elephant);
+    CollisionWorld.addBox(x - 1.8, y, z - 1.8, x + 1.8, y + 3.2, z + 2.5, true);
+  },
+
+  // INTERACTIVE WARDROBE CLOSET IN LOBBY ROOM
+  buildLobbyWardrobe(scene, x, y, z) {
+    const wardrobeFrame = new THREE.Mesh(new THREE.BoxGeometry(2.4, 4.4, 1.4), Assets.woodMat);
+    wardrobeFrame.position.set(x, y + 2.2, z);
+    scene.add(wardrobeFrame);
+    CollisionWorld.addBox(x - 1.2, y, z - 0.7, x + 1.2, y + 4.4, z + 0.7, true);
+
+    this.interactables.push({
+      mesh: wardrobeFrame,
+      prompt: '[E] Customize Appearance',
+      action: () => {
+        showScreen('wardrobe-modal');
+        if (typeof WardrobePreview !== 'undefined') WardrobePreview.init();
+        return 'Opened Wardrobe.';
+      }
+    });
+  },
+
+  // HOST LAPTOP TERMINAL TABLE IN LOBBY ROOM
+  buildHostLaptopTable(scene, x, y, z) {
+    const table = new THREE.Mesh(new THREE.BoxGeometry(2.2, 1.4, 1.2), Assets.woodMat);
+    table.position.set(x, y + 0.7, z);
+    scene.add(table);
+    CollisionWorld.addBox(x - 1.1, y, z - 0.6, x + 1.1, y + 1.4, z + 0.6, true);
+
+    // Laptop Base & Glowing Screen
+    const laptopGroup = new THREE.Group();
+    const lBase = new THREE.Mesh(new THREE.BoxGeometry(0.6, 0.04, 0.45), Assets.metalMat);
+    laptopGroup.add(lBase);
+    const lScreen = new THREE.Mesh(new THREE.BoxGeometry(0.6, 0.42, 0.03), Assets.screenMat);
+    lScreen.position.set(0, 0.22, -0.22);
+    lScreen.rotation.x = -0.25;
+    laptopGroup.add(lScreen);
+
+    laptopGroup.position.set(x, y + 1.42, z);
+    scene.add(laptopGroup);
+
+    this.interactables.push({
+      mesh: lBase,
+      prompt: '[E] Host Terminal',
+      action: () => {
+        if (!NetworkEngine.isHost) {
+          return 'Host Only: You are not the lobby host!';
+        }
+        openHostLaptopTerminal();
+        return 'Accessed Manor Terminal.';
+      }
+    });
+  },
+
+  // KNOCK-DOWN WALL PAINTINGS (DETACH & CLATTER ON COLLISION)
+  buildKnockdownPainting(scene, x, y, z, rotY) {
+    const pGroup = new THREE.Group();
+    const frame = new THREE.Mesh(new THREE.BoxGeometry(1.6, 2.0, 0.08), Assets.woodMat);
+    pGroup.add(frame);
+
+    const canvasMesh = new THREE.Mesh(new THREE.BoxGeometry(1.4, 1.8, 0.02), Assets.skinMat);
+    canvasMesh.position.z = 0.04;
+    pGroup.add(canvasMesh);
+
+    pGroup.position.set(x, y, z);
+    pGroup.rotation.y = rotY;
+    scene.add(pGroup);
+
+    const paintingProp = {
+      type: 'painting',
+      group: pGroup,
+      isFallen: false,
       velocity: new THREE.Vector3(),
       rotVel: 0,
-      radius: 0.7,
-      height: 1.45,
+      radius: 0.85,
       yPos: y
     };
-    this.dynamicProps.push(prop);
+    this.dynamicProps.push(paintingProp);
   },
 
-  // DRESSER WITH 3D HOLLOW CAVITY DRAWERS (CAN STORE AND CARRY ITEMS)
+  // DYNAMIC PUSHABLE CHAIRS
+  buildPushableChair(scene, x, y, z) {
+    const chair = new THREE.Group();
+    const seat = new THREE.Mesh(new THREE.BoxGeometry(0.7, 0.08, 0.7), Assets.woodMat);
+    seat.position.y = 0.75;
+    chair.add(seat);
+
+    const back = new THREE.Mesh(new THREE.BoxGeometry(0.7, 0.8, 0.08), Assets.woodMat);
+    back.position.set(0, 1.15, -0.32);
+    chair.add(back);
+
+    const legGeo = new THREE.CylinderGeometry(0.04, 0.04, 0.75, 8);
+    const c1 = new THREE.Mesh(legGeo, Assets.woodMat); c1.position.set(0.28, 0.37, 0.28); chair.add(c1);
+    const c2 = new THREE.Mesh(legGeo, Assets.woodMat); c2.position.set(-0.28, 0.37, 0.28); chair.add(c2);
+    const c3 = new THREE.Mesh(legGeo, Assets.woodMat); c3.position.set(0.28, 0.37, -0.28); chair.add(c3);
+    const c4 = new THREE.Mesh(legGeo, Assets.woodMat); c4.position.set(-0.28, 0.37, -0.28); chair.add(c4);
+
+    chair.position.set(x, y, z);
+    scene.add(chair);
+
+    const chairProp = {
+      type: 'chair',
+      group: chair,
+      velocity: new THREE.Vector3(),
+      radius: 0.5,
+      yPos: y
+    };
+    this.dynamicProps.push(chairProp);
+  },
+
+  // REAL 3D HOLLOW CAVITY DRAWERS
   buildDresserWithRealDrawers(scene, x, y, z) {
     const dresserW = 2.0, dresserH = 2.4, dresserD = 1.4;
     const body = new THREE.Mesh(new THREE.BoxGeometry(dresserW, dresserH, dresserD), Assets.woodMat);
@@ -427,22 +711,19 @@ const House = {
       const dD = dresserD - 0.2;
       const dY = y + 0.35 + i * (dH + 0.18);
 
-      // 1. Bottom tray plate
+      // Hollow Tray Mesh Construction
       const btm = new THREE.Mesh(new THREE.BoxGeometry(dW, 0.04, dD), Assets.frameMat);
       btm.position.set(0, 0.02, -dD / 2);
       drawerGroup.add(btm);
 
-      // 2. Front face
       const front = new THREE.Mesh(new THREE.BoxGeometry(dW + 0.05, dH, 0.08), Assets.frameMat);
       front.position.set(0, dH / 2, 0);
       drawerGroup.add(front);
 
-      // 3. Brass handle
       const handle = new THREE.Mesh(new THREE.BoxGeometry(0.35, 0.06, 0.08), Assets.metalMat);
       handle.position.set(0, dH / 2, 0.07);
       drawerGroup.add(handle);
 
-      // 4. Side & back walls of tray
       const sideLeft = new THREE.Mesh(new THREE.BoxGeometry(0.04, dH - 0.08, dD), Assets.frameMat);
       sideLeft.position.set(-dW / 2 + 0.02, dH / 2 - 0.04, -dD / 2);
       drawerGroup.add(sideLeft);
@@ -457,13 +738,6 @@ const House = {
 
       drawerGroup.position.set(x, dY, z + dresserD / 2);
       scene.add(drawerGroup);
-
-      // Put the Padlock Key inside the Top Drawer!
-      if (i === 1) {
-        const keyItem = this.spawnPhysicsItem(scene, 'Padlock Key', new THREE.Vector3(0, 0.08, -dD / 2), 0.15);
-        drawerGroup.add(keyItem.group);
-        keyItem.group.position.set(0, 0.08, -dD / 2);
-      }
 
       const drawerObj = {
         group: drawerGroup,
@@ -486,6 +760,44 @@ const House = {
         }
       });
     }
+  },
+
+  buildTippableTable(scene, x, y, z) {
+    const tableGroup = new THREE.Group();
+
+    const top = new THREE.Mesh(new THREE.BoxGeometry(1.3, 0.1, 1.3), Assets.woodMat);
+    top.position.y = 1.35;
+    tableGroup.add(top);
+
+    const legGeo = new THREE.CylinderGeometry(0.045, 0.045, 1.35, 8);
+    const l1 = new THREE.Mesh(legGeo, Assets.woodMat); l1.position.set(0.5, 0.67, 0.5); tableGroup.add(l1);
+    const l2 = new THREE.Mesh(legGeo, Assets.woodMat); l2.position.set(-0.5, 0.67, 0.5); tableGroup.add(l2);
+    const l3 = new THREE.Mesh(legGeo, Assets.woodMat); l3.position.set(0.5, 0.67, -0.5); tableGroup.add(l3);
+    const l4 = new THREE.Mesh(legGeo, Assets.woodMat); l4.position.set(-0.5, 0.67, -0.5); tableGroup.add(l4);
+
+    const shelf = new THREE.Mesh(new THREE.BoxGeometry(1.1, 0.05, 1.1), Assets.woodMat);
+    shelf.position.y = 0.35;
+    tableGroup.add(shelf);
+
+    const vase = new THREE.Mesh(new THREE.CylinderGeometry(0.12, 0.18, 0.48, 10), Assets.skinMat);
+    vase.position.set(0, 1.64, 0);
+    tableGroup.add(vase);
+
+    tableGroup.position.set(x, y, z);
+    scene.add(tableGroup);
+
+    const prop = {
+      type: 'table',
+      group: tableGroup,
+      vaseMesh: vase,
+      isTipped: false,
+      velocity: new THREE.Vector3(),
+      rotVel: 0,
+      radius: 0.7,
+      height: 1.45,
+      yPos: y
+    };
+    this.dynamicProps.push(prop);
   },
 
   buildWardrobeCloset(scene, x, y, z) {
@@ -619,10 +931,12 @@ const House = {
       prompt: `[E] Pick up ${name}`,
       itemRecord: record,
       action: (inv) => {
+        // Enforce strict single-pickup: cannot pick up twice
+        if (record.inInventory) return '';
         if (inv.add(record)) {
           if (group.parent) group.parent.remove(group);
           record.inInventory = true;
-          return `Picked up ${name}.`;
+          return ''; // Silent pickup to user as requested
         }
         return 'Inventory is full!';
       }
