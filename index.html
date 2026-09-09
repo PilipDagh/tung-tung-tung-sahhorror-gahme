@@ -19,7 +19,7 @@
   <!-- CLICK TO LOCK MOUSE BANNER -->
   <div id="click-to-focus">
     <h2>CLICK TO RESUME & LOCK MOUSE</h2>
-    <p>Move mouse to look • WASD to walk • E to interact • G to drop</p>
+    <p>Move mouse to look • WASD to walk • E to interact • G to drop • M for Menu</p>
   </div>
 
   <!-- GP (GRANNY PLAYER) NAP OVERLAY -->
@@ -65,11 +65,12 @@
     <div style="font-size:11px;color:#aaa;margin-top:3px;">If a player joins or leaves, countdown cancels!</div>
   </div>
 
-  <!-- MOBILE CONTROLS -->
+  <!-- MOBILE ON-SCREEN CONTROLS -->
   <div id="mobile-controls">
     <div class="touch-zone" id="touch-move"><div class="joystick-knob" id="knob-move"></div></div>
     <div class="touch-zone" id="touch-look"><div class="joystick-knob" id="knob-look"></div></div>
     <div id="mobile-buttons">
+      <button class="mob-btn" id="m-btn-menu">MENU</button>
       <button class="mob-btn" id="m-btn-use">USE</button>
       <button class="mob-btn" id="m-btn-drop">DROP</button>
       <button class="mob-btn" id="m-btn-crouch">CROUCH</button>
@@ -78,6 +79,21 @@
       <button class="mob-btn fun-btn" id="m-btn-spawn" style="display:none;">SPAWN</button>
       <button class="mob-btn fun-btn" id="m-btn-up" style="display:none;">UP</button>
       <button class="mob-btn fun-btn" id="m-btn-down" style="display:none;">DOWN</button>
+    </div>
+  </div>
+
+  <!-- IN-GAME PAUSE / ACTION MENU (OPENED VIA [M] OR MOBILE [MENU]) -->
+  <div id="pause-menu-modal" class="menu-screen" style="display:none;">
+    <div class="panel text-center">
+      <h2 id="pause-menu-title" style="color:var(--blood-bright);letter-spacing:3px;">PAUSED</h2>
+      <p id="pause-menu-sub" style="font-size:12px;color:#aaa;margin-bottom:15px;">Singleplayer is paused. In multiplayer, the world keeps running.</p>
+      
+      <div style="display:flex;flex-direction:column;gap:10px;align-items:center;">
+        <button class="menu-btn full" id="btn-pause-resume">RESUME GAME</button>
+        <button class="menu-btn full" id="btn-pause-settings">SETTINGS</button>
+        <button class="menu-btn full" id="btn-pause-stats">CAREER STATS</button>
+        <button class="menu-btn full danger" id="btn-pause-exit">EXIT TO MAIN MENU</button>
+      </div>
     </div>
   </div>
 
@@ -114,7 +130,7 @@
     <button class="menu-btn" id="btn-settings">Settings</button>
   </div>
 
-  <!-- SINGLE PLAYER MODAL -->
+  <!-- SINGLE PLAYER CONFIG -->
   <div class="menu-screen" id="sp-modal" style="display:none;">
     <div class="panel">
       <h2>SINGLE PLAYER CONFIG</h2>
@@ -152,6 +168,7 @@
       <h2>GLOBAL MULTIPLAYER</h2>
       <div id="net-status-pill">CONNECTING TO CLUSTER...</div>
 
+      <!-- LOBBY BROWSER -->
       <div id="mp-lobby-browser">
         <div class="browser-header">
           <span>Active Lobbies:</span>
@@ -174,31 +191,63 @@
         </div>
       </div>
 
-      <!-- CREATE LOBBY -->
+      <!-- CREATE LOBBY PANEL -->
       <div id="mp-create-box" style="display:none;">
+        <h3 style="color:#fff;margin-bottom:12px;font-size:16px;">HOST LOBBY CONFIGURATION</h3>
         <div class="setting-row">
-          <label>Lobby Name (Use "FUN TIME" for zero-g)</label>
+          <label>Lobby Name</label>
           <input type="text" id="mp-room-name" value="Sahur Manor Escape" maxlength="24" />
         </div>
         <div class="setting-row">
-          <label>Max Players (Up to 21)</label>
+          <label>Max Players (2 - 21)</label>
           <input type="range" id="mp-max-players" min="2" max="21" value="8" />
           <span id="mp-max-players-val">8</span>
         </div>
-        <div class="setting-row" id="row-player-granny" style="display:none;">
-          <label style="color:#ff5555;">Player as Granny (GP Mode - 5+ Players)</label>
+        <div class="setting-row">
+          <label>Game Difficulty</label>
+          <select id="mp-diff">
+            <option value="easy">Easy</option>
+            <option value="normal" selected>Normal</option>
+            <option value="hard">Hard</option>
+            <option value="extreme">Extreme</option>
+          </select>
+        </div>
+        <div class="setting-row">
+          <label>Nightmare Mode</label>
+          <input type="checkbox" id="mp-nightmare" />
+        </div>
+        <div class="setting-row">
+          <label>Extra Locks</label>
+          <input type="checkbox" id="mp-locks" />
+        </div>
+        <div class="setting-row">
+          <label>Extra Fog</label>
+          <input type="checkbox" id="mp-fog" />
+        </div>
+        <!-- ONLY APPEARS IF MAX PLAYERS >= 5 -->
+        <div class="setting-row" id="row-player-granny">
+          <label style="color:#ff5555;font-weight:bold;">Player as Granny (GP Mode)</label>
           <input type="checkbox" id="mp-enable-gp" />
         </div>
-        <button class="menu-btn full" id="btn-commit-create-lobby">HOST & ENTER 3D LOBBY</button>
+        <!-- ONLY APPEARS IF MAX PLAYERS >= 5 -->
+        <div class="setting-row" id="row-funmode">
+          <label style="color:#00ffaa;font-weight:bold;">Special Fun Mode (Zero-G)</label>
+          <input type="checkbox" id="mp-funmode" />
+        </div>
+
+        <div class="btn-row" style="margin-top:12px;">
+          <button class="menu-btn full" id="btn-commit-create-lobby">HOST AND HOP IN LOBBY</button>
+          <button class="menu-btn full" id="btn-cancel-create">CANCEL</button>
+        </div>
       </div>
 
-      <div class="btn-row" style="margin-top:15px;">
+      <div class="btn-row" id="row-mp-back" style="margin-top:15px;">
         <button class="menu-btn full" id="btn-mp-back">BACK TO MENU</button>
       </div>
     </div>
   </div>
 
-  <!-- HOST LAPTOP TERMINAL MODAL (ACCESSIBLE INSIDE 3D LOBBY BY HOST) -->
+  <!-- HOST LAPTOP TERMINAL MODAL -->
   <div id="laptop-modal" class="menu-screen" style="display:none;">
     <div class="panel">
       <h2 style="color:#00ffaa;">MANOR TERMINAL v2.4 [HOST ONLY]</h2>
@@ -254,13 +303,11 @@
 
       <!-- GRAPHICS TAB -->
       <div id="tab-gfx" class="tab-content">
-        <!-- FUNCTIONAL FPS LIMITER SLIDER (1 TO 1200 FPS) -->
         <div class="setting-row">
           <label>Target FPS Cap (1 - 1200 FPS)</label>
           <input type="range" id="opt-fps-slider" min="1" max="1200" step="1" value="120" />
           <span id="opt-fps-val">120 FPS</span>
         </div>
-        <!-- FUNCTIONAL UI SCALE SLIDER (50% TO 150%) -->
         <div class="setting-row">
           <label>UI Scale (50% - 150%)</label>
           <input type="range" id="opt-uiscale" min="0.5" max="1.5" step="0.05" value="1.0" />
@@ -282,8 +329,8 @@
         </div>
         <div class="setting-row">
           <label>Brightness / Gamma</label>
-          <input type="range" id="opt-gamma" min="0.5" max="1.8" step="0.1" value="1.0" />
-          <span id="opt-gamma-val">1.0</span>
+          <input type="range" id="opt-gamma" min="0.5" max="2.0" step="0.1" value="1.2" />
+          <span id="opt-gamma-val">1.2</span>
         </div>
         <div class="setting-row">
           <label>Resolution Scale</label>
