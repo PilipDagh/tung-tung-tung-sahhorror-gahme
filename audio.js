@@ -1,5 +1,5 @@
 /* =========================================================================
-   AUDIO.JS - CUSTOM AUDIO LOADER (SILENT BY DEFAULT UNTIL FILES ADDED)
+   AUDIO.JS - CUSTOM SOUND ENGINE (SILENT IF AUDIO FILES NOT FOUND)
    ========================================================================= */
 class DualAudioEngine {
   constructor() {
@@ -21,7 +21,10 @@ class DualAudioEngine {
       drawer: 'audio/drawer.mp3',
       crossbow: 'audio/crossbow.mp3',
       shotgun: 'audio/shotgun.mp3',
-      drop: 'audio/item_drop.mp3'
+      drop: 'audio/item_drop.mp3',
+      bat_hit: 'audio/bat_hit.mp3',
+      painting_drop: 'audio/painting_drop.mp3',
+      bounce: 'audio/bounce.mp3'
     };
   }
 
@@ -65,7 +68,7 @@ class DualAudioEngine {
           console.log(`[Audio Engine] Custom audio file found & loaded: ${path}`);
         }
       } catch (e) {
-        // Missing audio will remain silent
+        // Missing audio remains completely silent as requested
       }
     }
   }
@@ -123,6 +126,18 @@ class DualAudioEngine {
 
   playItemDrop(name) {
     this.playFile('drop', this.sfxGain);
+  }
+
+  playBatHit() {
+    this.playFile('bat_hit', this.sfxGain);
+  }
+
+  playPaintingDrop() {
+    this.playFile('painting_drop', this.sfxGain);
+  }
+
+  playBounce() {
+    this.playFile('bounce', this.sfxGain);
   }
 
   playCreak() {
