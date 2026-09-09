@@ -1,12 +1,12 @@
 /* =========================================================================
-   GAME.JS - COMPLETE CONTROLLER, PAUSE MENU, MULTIPLAYER CREATE & LIGHTING
+   GAME.JS - CAMERA LIGHTING, PAUSE MENU, SAFE LOBBY CREATION & AI CONTROLLER
    ========================================================================= */
 
 const _tempVecA = new THREE.Vector3();
 const _tempRayOrigin = new THREE.Vector3();
 const _tempClampPt = new THREE.Vector3();
 
-// 1. PERSISTENT LOCAL STORAGE & STATS
+// 1. PERSISTENT LOCAL STORAGE & CAREER STATS
 const CareerStats = {
   load() {
     const savedName = localStorage.getItem('granny_username');
@@ -42,7 +42,7 @@ const CareerStats = {
   }
 };
 
-// 2. FIRST-PERSON VIEWMODEL
+// 2. FIRST-PERSON VIEWMODEL RIG
 const Viewmodel = {
   group: new THREE.Group(),
   models: {},
@@ -56,6 +56,7 @@ const Viewmodel = {
     camera.add(this.group);
     this.group.position.set(0.32, -0.28, -0.55);
 
+    // Crossbow Viewmodel
     const bow = new THREE.Group();
     const stock = new THREE.Mesh(new THREE.BoxGeometry(0.08, 0.1, 0.65), Assets.woodMat);
     bow.add(stock);
@@ -69,6 +70,7 @@ const Viewmodel = {
     bow.add(this.loadedDart);
     this.models['Tranquilizer Crossbow'] = bow;
 
+    // Shotgun Viewmodel
     const sg = new THREE.Group();
     const barrels = new THREE.Mesh(new THREE.CylinderGeometry(0.035, 0.035, 0.72, 8), Assets.metalMat);
     barrels.rotation.x = Math.PI * 0.5;
@@ -79,6 +81,7 @@ const Viewmodel = {
     sg.add(sgStock);
     this.models['Shotgun'] = sg;
 
+    // Hammer Viewmodel
     const hm = new THREE.Group();
     const handle = new THREE.Mesh(new THREE.CylinderGeometry(0.025, 0.025, 0.46, 8), Assets.woodMat);
     hm.add(handle);
@@ -88,6 +91,7 @@ const Viewmodel = {
     hm.rotation.x = 0.4;
     this.models['Hammer'] = hm;
 
+    // Gasoline Can Viewmodel
     const gas = new THREE.Group();
     const gasBody = new THREE.Mesh(new THREE.BoxGeometry(0.24, 0.32, 0.18), Assets.bloodMat);
     gas.add(gasBody);
@@ -96,6 +100,7 @@ const Viewmodel = {
     gas.add(spout);
     this.models['Gasoline Can'] = gas;
 
+    // Keys Viewmodel
     const key = new THREE.Group();
     const ring = new THREE.Mesh(new THREE.TorusGeometry(0.06, 0.015, 6, 12), Assets.metalMat);
     key.add(ring);
@@ -105,6 +110,7 @@ const Viewmodel = {
     key.add(stem);
     this.models['GenericKey'] = key;
 
+    // Granny Player (GP) Mallet Bat Viewmodel
     const batGroup = new THREE.Group();
     const batMesh = new THREE.Mesh(new THREE.CylinderGeometry(0.045, 0.07, 1.1, 8), Assets.woodMat);
     batMesh.position.set(0.1, 0.1, -0.2);
@@ -158,7 +164,7 @@ const Viewmodel = {
   }
 };
 
-// 3. PLAYER CONTROLLER WITH CAMERA-ATTACHED FLASHLIGHT & STABLE LIGHTING
+// 3. PLAYER CONTROLLER WITH SAFE CAMERA LIGHTING (ELIMINATES BLACK SCREENS)
 const Player = {
   position: new THREE.Vector3(60.0, 30.0, 2.0),
   velocity: new THREE.Vector3(),
@@ -179,15 +185,14 @@ const Player = {
   isGrounded: false,
 
   init(camera, scene) {
-    // FLASHLIGHT PARENTED DIRECTLY TO CAMERA (PREVENTS PITCH-BLACK VOID)
-    this.flashlight = new THREE.SpotLight(0xfff6ea, 3.2, 32, Math.PI * 0.30, 0.45, 1.2);
-    this.flashlight.position.set(0.2, -0.2, 0.1);
-    this.flashlight.target.position.set(0, -0.1, -5);
+    // CAMERA-ATTACHED DUAL LIGHTING: Spot beam + ambient proximity fill
+    this.flashlight = new THREE.SpotLight(0xfff6ea, 3.5, 35, Math.PI * 0.32, 0.5, 1.0);
+    this.flashlight.position.set(0.2, -0.15, 0.1);
+    this.flashlight.target.position.set(0, -0.1, -6);
     camera.add(this.flashlight);
     camera.add(this.flashlight.target);
 
-    // Subtle proximity fill-light attached to camera
-    this.fillLight = new THREE.PointLight(0xffeedd, 0.6, 8);
+    this.fillLight = new THREE.PointLight(0xffeedd, 0.8, 10);
     this.fillLight.position.set(0, 0, 0.2);
     camera.add(this.fillLight);
 
@@ -198,11 +203,12 @@ const Player = {
     this.isIntroPlaying = true;
     this.introTimer = 0;
     this.isHiding = false;
-    this.position.set(-9.0, 6.0, 10.5);
-    this.rotation.set(0.85, 0, 0);
+    this.position.set(-9.0, 6.0, 9.8);
+    // Tilted forward across bedroom looking toward nightstand and door
+    this.rotation.set(0.25, -0.4, 0);
 
     if (camera) {
-      camera.position.set(-9.0, 7.55, 10.5);
+      camera.position.set(-9.0, 7.45, 9.8);
       camera.quaternion.setFromEuler(this.rotation);
     }
   },
@@ -221,29 +227,27 @@ const Player = {
   },
 
   update(dt, camera) {
-    // A. WAKE-UP BED ANIMATION
+    // A. WAKE-UP BED ANIMATION PROGRESSION
     if (this.isIntroPlaying) {
       this.introTimer += dt;
 
       if (this.introTimer < 1.5) {
-        camera.position.set(-9.0, 7.55, 10.5);
-        this.rotation.x = 0.85 - Math.sin(this.introTimer * 2.5) * 0.08;
-        this.rotation.y = Math.cos(this.introTimer * 1.8) * 0.18;
-        this.rotation.z = Math.sin(this.introTimer * 2.0) * 0.06;
+        camera.position.set(-9.0, 7.45, 9.8);
+        this.rotation.x = 0.25 - Math.sin(this.introTimer * 2.5) * 0.06;
+        this.rotation.y = -0.4 + Math.cos(this.introTimer * 1.8) * 0.15;
       } else if (this.introTimer < 3.2) {
         const t = (this.introTimer - 1.5) / 1.7;
         camera.position.x = THREE.MathUtils.lerp(-9.0, -8.3, t);
-        camera.position.y = THREE.MathUtils.lerp(7.55, 7.5, t);
-        camera.position.z = THREE.MathUtils.lerp(10.5, 9.4, t);
+        camera.position.y = THREE.MathUtils.lerp(7.45, 7.5, t);
+        camera.position.z = THREE.MathUtils.lerp(9.8, 9.2, t);
 
-        this.rotation.x = THREE.MathUtils.lerp(0.85, 0.0, t);
-        this.rotation.y = THREE.MathUtils.lerp(0.0, -Math.PI * 0.5, t);
-        this.rotation.z = THREE.MathUtils.lerp(this.rotation.z, 0.0, t);
+        this.rotation.x = THREE.MathUtils.lerp(0.25, 0.0, t);
+        this.rotation.y = THREE.MathUtils.lerp(-0.4, -Math.PI * 0.5, t);
       } else if (this.introTimer < 4.4) {
         const t = (this.introTimer - 3.2) / 1.2;
         camera.position.x = THREE.MathUtils.lerp(-8.3, -6.6, t);
         camera.position.y = THREE.MathUtils.lerp(7.5, 7.62, t);
-        camera.position.z = THREE.MathUtils.lerp(9.4, 8.5, t);
+        camera.position.z = THREE.MathUtils.lerp(9.2, 8.5, t);
       } else {
         this.isIntroPlaying = false;
         this.position.set(-6.6, 6.0, 8.5);
@@ -288,7 +292,7 @@ const Player = {
       return;
     }
 
-    // D. FIRST-PERSON MOVEMENT & GRAVITY
+    // D. FIRST-PERSON MOVEMENT & PHYSICS
     const curSpeed = (this.isCrouched ? this.crouchSpeed : this.speed) * this.limpMultiplier;
     const move = new THREE.Vector3();
     if (Input.keys['KeyW']) move.z -= 1;
@@ -336,6 +340,7 @@ const Player = {
   checkDynamicCollisions(moveDir, speed) {
     const now = performance.now();
 
+    // Kick/push dynamic physics items on floor
     for (let i = 0; i < House.physicsItems.length; i++) {
       const item = House.physicsItems[i];
       if (item.inInventory) continue;
@@ -362,6 +367,7 @@ const Player = {
       }
     }
 
+    // Tippable bedside table
     for (let i = 0; i < House.dynamicProps.length; i++) {
       const prop = House.dynamicProps[i];
       if (prop.type === 'table' && !prop.isTipped) {
@@ -606,7 +612,7 @@ const Inventory = {
   }
 };
 
-// 5. FUN MODE SIMULATION
+// 5. FUN MODE ZERO-G PHYSICS
 const FunPhysics = {
   balls: [],
 
@@ -647,7 +653,7 @@ const FunPhysics = {
   }
 };
 
-// 6. WORLD PROPS UPDATE
+// 6. WORLD PROPS & INTERPOLATION
 function updatePhysicsAndWorld(dt) {
   for (let i = 0; i < House.doors.length; i++) {
     const door = House.doors[i];
@@ -710,7 +716,7 @@ function updatePhysicsAndWorld(dt) {
   }
 }
 
-// 7. GRANNY TUNG TUNG SAHUR AI
+// 7. GRANNY TUNG TUNG SAHUR AI (REALISTIC FORWARD CONE VISION & PROXIMITY AGGRO)
 const MonsterAI = {
   mesh: null,
   state: 'PATROL',
@@ -838,12 +844,14 @@ const MonsterAI = {
     const fwd = new THREE.Vector3(0, 0, 1).applyEuler(this.mesh.rotation);
     _tempVecA.normalize();
 
+    // 75° Vision Cone: if her back is turned, she CANNOT see you!
     const angle = fwd.angleTo(_tempVecA);
     if (angle > this.visionAngle) {
       this.lastCanSeeResult = false;
       return false;
     }
 
+    // Proximity agro in same room (unless crouching!)
     if (dist < 4.5 && !Player.isCrouched) {
       this.lastCanSeeResult = true;
       return true;
@@ -1581,7 +1589,7 @@ function setupAsGrannyPlayer() {
   }, 1000);
 }
 
-// 15. SETTINGS CONTROLLER
+// 15. SETTINGS CONTROLLER (LIVE FPS & UI SCALE SLIDERS)
 const SettingsEngine = {
   init(renderer, camera, scene) {
     const fpsSlider = document.getElementById('opt-fps-slider');
@@ -1609,7 +1617,7 @@ const SettingsEngine = {
     const gammaEl = document.getElementById('opt-gamma');
     gammaEl.oninput = (e) => {
       const v = parseFloat(e.target.value);
-      ambLight.intensity = 0.45 * v;
+      ambLight.intensity = 0.75 * v;
       document.getElementById('opt-gamma-val').innerText = `${v.toFixed(1)}`;
     };
 
@@ -1622,10 +1630,10 @@ const SettingsEngine = {
     const fogEl = document.getElementById('opt-fog');
     fogEl.onchange = (e) => {
       const v = e.target.value;
-      if (v === 'none') scene.fog.density = 0;
-      else if (v === 'light') scene.fog.density = 0.02;
-      else if (v === 'normal') scene.fog.density = 0.035;
-      else if (v === 'heavy') scene.fog.density = 0.08;
+      if (v === 'none') scene.fog.near = 999;
+      else if (v === 'light') { scene.fog.near = 20; scene.fog.far = 70; }
+      else if (v === 'normal') { scene.fog.near = 12; scene.fog.far = 50; }
+      else if (v === 'heavy') { scene.fog.near = 5; scene.fog.far = 25; }
     };
 
     const sensEl = document.getElementById('opt-sens');
@@ -1671,7 +1679,7 @@ const SettingsEngine = {
   }
 };
 
-// 16. RUNTIME INITIALIZATION & GAME STATE
+// 16. RUNTIME INITIALIZATION & SCENE LIGHTING
 const GameState = {
   mode: 'sp',
   difficulty: 'normal',
@@ -1693,8 +1701,9 @@ const EngineLimiter = {
 
 const canvasContainer = document.getElementById('canvas-container');
 const scene = new THREE.Scene();
-scene.background = new THREE.Color(0x0c0b0a);
-scene.fog = new THREE.FogExp2(0x0c0b0a, 0.035);
+scene.background = new THREE.Color(0x1a1815);
+// Soft linear fog that NEVER blacks out nearby rooms
+scene.fog = new THREE.Fog(0x1a1815, 12, 50);
 
 const camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 80);
 scene.add(camera);
@@ -1704,23 +1713,24 @@ renderer.setSize(window.innerWidth, window.innerHeight);
 renderer.setPixelRatio(Math.min(window.devicePixelRatio, 1.5));
 canvasContainer.appendChild(renderer.domElement);
 
-// Increased base ambient light
-const ambLight = new THREE.AmbientLight(0x555555);
+// Increased Base Ambient Light to Prevent Pitch-Black Mud
+const ambLight = new THREE.AmbientLight(0xffeedd, 0.75);
 scene.add(ambLight);
 
-// Point lights in Manor
-const bedroomLamp = new THREE.PointLight(0xffb055, 1.8, 16);
+// Room Lamps in Manor
+const bedroomLamp = new THREE.PointLight(0xffb055, 2.0, 20);
 bedroomLamp.position.set(-8, 9.5, 8);
 scene.add(bedroomLamp);
 
-const foyerLamp = new THREE.PointLight(0xffdd99, 1.8, 20);
+const foyerLamp = new THREE.PointLight(0xffdd99, 2.0, 22);
 foyerLamp.position.set(0, 4.2, 8);
 scene.add(foyerLamp);
 
-const basementLight = new THREE.PointLight(0x66cc88, 1.5, 18);
+const basementLight = new THREE.PointLight(0x66cc88, 1.8, 20);
 basementLight.position.set(-4, -3.5, -4);
 scene.add(basementLight);
 
+// Build Map, Player & AI
 House.build(scene);
 Player.init(camera, scene);
 MonsterAI.init(scene);
@@ -1761,11 +1771,11 @@ document.getElementById('sp-start').onclick = () => {
   GameState.difficulty = document.getElementById('sp-diff').value;
   GameState.funMode = document.getElementById('sp-funmode').checked;
 
-  if (GameState.funMode) {
-    document.getElementById('m-btn-spawn').style.display = 'flex';
-    document.getElementById('m-btn-up').style.display = 'flex';
-    document.getElementById('m-btn-down').style.display = 'flex';
-  }
+  // Enforce Clean Fun Mode Mobile Button Visibility
+  const funDisplay = GameState.funMode ? 'flex' : 'none';
+  document.getElementById('m-btn-spawn').style.display = funDisplay;
+  document.getElementById('m-btn-up').style.display = funDisplay;
+  document.getElementById('m-btn-down').style.display = funDisplay;
 
   MonsterAI.applyDifficultySettings();
   audio.init();
@@ -1773,7 +1783,7 @@ document.getElementById('sp-start').onclick = () => {
   showDaySequence();
 };
 
-// FIX FOR MULTIPLAYER "+ CREATE" BUTTON (PROPERLY SHOWS CUSTOMIZE OPTIONS)
+// MULTIPLAYER "+ CREATE" TOGGLE HANDLERS
 document.getElementById('btn-show-create-lobby').onclick = () => {
   document.getElementById('mp-lobby-browser').style.display = 'none';
   document.getElementById('mp-create-box').style.display = 'block';
@@ -1786,7 +1796,7 @@ document.getElementById('btn-cancel-create').onclick = () => {
   document.getElementById('row-mp-back').style.display = 'flex';
 };
 
-// Dynamic display of GP Mode & Fun Mode (ONLY IF MAX PLAYERS >= 5)
+// DYNAMIC TOGGLES FOR GP MODE & FUN MODE (ONLY IF MAX PLAYERS >= 5)
 document.getElementById('mp-max-players').oninput = (e) => {
   const v = parseInt(e.target.value);
   document.getElementById('mp-max-players-val').innerText = v;
@@ -1810,18 +1820,22 @@ document.getElementById('btn-commit-create-lobby').onclick = () => {
   GameState.difficulty = document.getElementById('mp-diff').value;
   MonsterAI.applyDifficultySettings();
 
-  if (document.getElementById('mp-funmode').checked || NetworkEngine.roomName.toUpperCase() === 'FUN TIME') {
-    GameState.funMode = true;
-    document.getElementById('m-btn-spawn').style.display = 'flex';
-    document.getElementById('m-btn-up').style.display = 'flex';
-    document.getElementById('m-btn-down').style.display = 'flex';
-  }
+  GameState.funMode = document.getElementById('mp-funmode').checked || (NetworkEngine.roomName.toUpperCase() === 'FUN TIME');
+  const funDisplay = GameState.funMode ? 'flex' : 'none';
+  document.getElementById('m-btn-spawn').style.display = funDisplay;
+  document.getElementById('m-btn-up').style.display = funDisplay;
+  document.getElementById('m-btn-down').style.display = funDisplay;
 
   showScreen('');
-  NetworkEngine.client.subscribe(`granny_v5_room/${NetworkEngine.roomCode}`);
-  NetworkEngine.announce();
 
-  // Host spawns inside 3D Lobby
+  try {
+    if (NetworkEngine.client && NetworkEngine.client.isConnected()) {
+      NetworkEngine.client.subscribe(`granny_v5_room/${NetworkEngine.roomCode}`);
+      NetworkEngine.announce();
+    }
+  } catch (err) {}
+
+  // Spawn Host into 3D Lobby Room
   Player.position.set(60.0, 30.0, 2.0);
   document.getElementById('hud').style.display = 'block';
   showPrompt('Spawned in 3D Lobby! Press [Enter] to start, or [E] on laptop for settings.');
@@ -1837,19 +1851,25 @@ document.getElementById('btn-join-code').onclick = () => {
   if (code.length >= 4) {
     NetworkEngine.roomCode = code;
     showScreen('');
-    NetworkEngine.client.subscribe(`granny_v5_room/${code}`);
-    NetworkEngine.broadcast(`granny_v5_room/${code}`, {
-      type: 'JOIN',
-      sender: NetworkEngine.myId,
-      name: document.getElementById('prof-name').value,
-      wardrobe: {
-        shirt: document.getElementById('wardrobe-shirt').value,
-        skin: document.getElementById('wardrobe-skin').value
+
+    try {
+      if (NetworkEngine.client && NetworkEngine.client.isConnected()) {
+        NetworkEngine.client.subscribe(`granny_v5_room/${code}`);
+        NetworkEngine.broadcast(`granny_v5_room/${code}`, {
+          type: 'JOIN',
+          sender: NetworkEngine.myId,
+          name: document.getElementById('prof-name').value,
+          wardrobe: {
+            shirt: document.getElementById('wardrobe-shirt').value,
+            skin: document.getElementById('wardrobe-skin').value
+          }
+        });
       }
-    });
+    } catch (err) {}
+
     Player.position.set(60.0, 30.0, 2.0);
     document.getElementById('hud').style.display = 'block';
-    showPrompt('Entered 3D Lobby! Waiting for host to start...');
+    showPrompt('Entered 3D Waiting Room! Waiting for host to start...');
   }
 };
 
@@ -1871,16 +1891,20 @@ function renderLobbyCard(data) {
   div.querySelector('button').onclick = () => {
     NetworkEngine.roomCode = data.code;
     showScreen('');
-    NetworkEngine.client.subscribe(`granny_v5_room/${data.code}`);
-    NetworkEngine.broadcast(`granny_v5_room/${data.code}`, {
-      type: 'JOIN',
-      sender: NetworkEngine.myId,
-      name: document.getElementById('prof-name').value,
-      wardrobe: {
-        shirt: document.getElementById('wardrobe-shirt').value,
-        skin: document.getElementById('wardrobe-skin').value
+    try {
+      if (NetworkEngine.client && NetworkEngine.client.isConnected()) {
+        NetworkEngine.client.subscribe(`granny_v5_room/${data.code}`);
+        NetworkEngine.broadcast(`granny_v5_room/${data.code}`, {
+          type: 'JOIN',
+          sender: NetworkEngine.myId,
+          name: document.getElementById('prof-name').value,
+          wardrobe: {
+            shirt: document.getElementById('wardrobe-shirt').value,
+            skin: document.getElementById('wardrobe-skin').value
+          }
+        });
       }
-    });
+    } catch (err) {}
     Player.position.set(60.0, 30.0, 2.0);
     document.getElementById('hud').style.display = 'block';
   };
@@ -1897,10 +1921,11 @@ function gameLoop() {
   const now = performance.now();
   const elapsed = now - EngineLimiter.lastFrameTime;
 
+  // FPS Limiter: Throttles to exact targetFPS (1 - 1200 FPS)
   if (elapsed < EngineLimiter.frameInterval) return;
   EngineLimiter.lastFrameTime = now - (elapsed % EngineLimiter.frameInterval);
 
-  // Pause in singleplayer stops delta time progression
+  // Singleplayer Pause Freezes Delta Time
   const dt = GameState.isPaused ? 0 : Math.min(elapsed / 1000, 0.05);
 
   if (!GameState.isPaused) {
