@@ -1,8 +1,7 @@
 /* =========================================================================
-   GAME.JS - GP MODE, GHOST FLIGHT, 3D LOBBY, FUN MODE, 1-1200 FPS & AI
+   GAME.JS - COMPLETE CONTROLLER, PAUSE MENU, MULTIPLAYER CREATE & LIGHTING
    ========================================================================= */
 
-// Pre-allocated static vectors for 0-allocation physics & collision loops
 const _tempVecA = new THREE.Vector3();
 const _tempRayOrigin = new THREE.Vector3();
 const _tempClampPt = new THREE.Vector3();
@@ -43,7 +42,7 @@ const CareerStats = {
   }
 };
 
-// 2. FIRST-PERSON VIEWMODEL (WEAPONS & GP BAT)
+// 2. FIRST-PERSON VIEWMODEL
 const Viewmodel = {
   group: new THREE.Group(),
   models: {},
@@ -57,7 +56,6 @@ const Viewmodel = {
     camera.add(this.group);
     this.group.position.set(0.32, -0.28, -0.55);
 
-    // Crossbow Viewmodel
     const bow = new THREE.Group();
     const stock = new THREE.Mesh(new THREE.BoxGeometry(0.08, 0.1, 0.65), Assets.woodMat);
     bow.add(stock);
@@ -71,7 +69,6 @@ const Viewmodel = {
     bow.add(this.loadedDart);
     this.models['Tranquilizer Crossbow'] = bow;
 
-    // Shotgun Viewmodel
     const sg = new THREE.Group();
     const barrels = new THREE.Mesh(new THREE.CylinderGeometry(0.035, 0.035, 0.72, 8), Assets.metalMat);
     barrels.rotation.x = Math.PI * 0.5;
@@ -82,7 +79,6 @@ const Viewmodel = {
     sg.add(sgStock);
     this.models['Shotgun'] = sg;
 
-    // Hammer Viewmodel
     const hm = new THREE.Group();
     const handle = new THREE.Mesh(new THREE.CylinderGeometry(0.025, 0.025, 0.46, 8), Assets.woodMat);
     hm.add(handle);
@@ -92,7 +88,6 @@ const Viewmodel = {
     hm.rotation.x = 0.4;
     this.models['Hammer'] = hm;
 
-    // Gasoline Can Viewmodel
     const gas = new THREE.Group();
     const gasBody = new THREE.Mesh(new THREE.BoxGeometry(0.24, 0.32, 0.18), Assets.bloodMat);
     gas.add(gasBody);
@@ -101,7 +96,6 @@ const Viewmodel = {
     gas.add(spout);
     this.models['Gasoline Can'] = gas;
 
-    // Keys Viewmodel
     const key = new THREE.Group();
     const ring = new THREE.Mesh(new THREE.TorusGeometry(0.06, 0.015, 6, 12), Assets.metalMat);
     key.add(ring);
@@ -111,7 +105,6 @@ const Viewmodel = {
     key.add(stem);
     this.models['GenericKey'] = key;
 
-    // Granny Player (GP) Mallet Bat Viewmodel
     const batGroup = new THREE.Group();
     const batMesh = new THREE.Mesh(new THREE.CylinderGeometry(0.045, 0.07, 1.1, 8), Assets.woodMat);
     batMesh.position.set(0.1, 0.1, -0.2);
@@ -165,9 +158,9 @@ const Viewmodel = {
   }
 };
 
-// 3. PLAYER CONTROLLER WITH GP ROLE, GHOST NOCLIP & BLOOD PROGRESSION
+// 3. PLAYER CONTROLLER WITH CAMERA-ATTACHED FLASHLIGHT & STABLE LIGHTING
 const Player = {
-  position: new THREE.Vector3(60.0, 30.0, 2.0), // Starts in 3D Lobby
+  position: new THREE.Vector3(60.0, 30.0, 2.0),
   velocity: new THREE.Vector3(),
   rotation: new THREE.Euler(0, 0, 0, 'YXZ'),
   radius: 0.35,
@@ -186,21 +179,19 @@ const Player = {
   isGrounded: false,
 
   init(camera, scene) {
-    this.flashlight = new THREE.SpotLight(0xfff5e4, 2.5, 24, Math.PI * 0.24, 0.35, 1.2);
-    this.flashlight.castShadow = true;
-    this.flashlight.shadow.mapSize.width = 1024;
-    this.flashlight.shadow.mapSize.height = 1024;
-    this.flashlight.shadow.bias = -0.001;
-    scene.add(this.flashlight);
-    scene.add(this.flashlight.target);
-    Viewmodel.init(camera);
-  },
+    // FLASHLIGHT PARENTED DIRECTLY TO CAMERA (PREVENTS PITCH-BLACK VOID)
+    this.flashlight = new THREE.SpotLight(0xfff6ea, 3.2, 32, Math.PI * 0.30, 0.45, 1.2);
+    this.flashlight.position.set(0.2, -0.2, 0.1);
+    this.flashlight.target.position.set(0, -0.1, -5);
+    camera.add(this.flashlight);
+    camera.add(this.flashlight.target);
 
-  updateFlashlight(camera) {
-    if (!this.flashlight) return;
-    this.flashlight.position.copy(camera.position);
-    const fwd = new THREE.Vector3(0, 0, -1).applyEuler(this.rotation);
-    this.flashlight.target.position.copy(camera.position).add(fwd);
+    // Subtle proximity fill-light attached to camera
+    this.fillLight = new THREE.PointLight(0xffeedd, 0.6, 8);
+    this.fillLight.position.set(0, 0, 0.2);
+    camera.add(this.fillLight);
+
+    Viewmodel.init(camera);
   },
 
   prepareBedPose(camera) {
@@ -213,7 +204,6 @@ const Player = {
     if (camera) {
       camera.position.set(-9.0, 7.55, 10.5);
       camera.quaternion.setFromEuler(this.rotation);
-      this.updateFlashlight(camera);
     }
   },
 
@@ -231,7 +221,7 @@ const Player = {
   },
 
   update(dt, camera) {
-    // A. WAKE-UP BED ANIMATION PROGRESSION
+    // A. WAKE-UP BED ANIMATION
     if (this.isIntroPlaying) {
       this.introTimer += dt;
 
@@ -268,7 +258,6 @@ const Player = {
       }
 
       camera.quaternion.setFromEuler(this.rotation);
-      this.updateFlashlight(camera);
       return;
     }
 
@@ -287,7 +276,6 @@ const Player = {
 
       camera.position.copy(this.position);
       camera.quaternion.setFromEuler(this.rotation);
-      this.updateFlashlight(camera);
       return;
     }
 
@@ -297,11 +285,10 @@ const Player = {
         camera.position.copy(this.hidingSpot.position);
       }
       camera.quaternion.setFromEuler(this.rotation);
-      this.updateFlashlight(camera);
       return;
     }
 
-    // D. STANDARD FIRST-PERSON MOVEMENT (WITH LIMP FACTOR)
+    // D. FIRST-PERSON MOVEMENT & GRAVITY
     const curSpeed = (this.isCrouched ? this.crouchSpeed : this.speed) * this.limpMultiplier;
     const move = new THREE.Vector3();
     if (Input.keys['KeyW']) move.z -= 1;
@@ -320,7 +307,6 @@ const Player = {
       move.applyAxisAngle(new THREE.Vector3(0, 1, 0), this.rotation.y);
     }
 
-    // Fun Mode Zero-G Float Handling
     if (GameState.funMode) {
       if (Input.keys['KeyZ']) this.velocity.y = 4.0;
       else if (Input.keys['KeyX']) this.velocity.y = -4.0;
@@ -343,16 +329,13 @@ const Player = {
     camera.position.set(this.position.x, this.position.y + eyeHeight, this.position.z);
     camera.quaternion.setFromEuler(this.rotation);
 
-    this.updateFlashlight(camera);
     Viewmodel.animate(dt, isMoving);
-
     this.checkDynamicCollisions(move, curSpeed);
   },
 
   checkDynamicCollisions(moveDir, speed) {
     const now = performance.now();
 
-    // 1. Kick/push dynamic physics items on the floor
     for (let i = 0; i < House.physicsItems.length; i++) {
       const item = House.physicsItems[i];
       if (item.inInventory) continue;
@@ -379,7 +362,6 @@ const Player = {
       }
     }
 
-    // 2. Tippable Bedside Table Knockdown Check
     for (let i = 0; i < House.dynamicProps.length; i++) {
       const prop = House.dynamicProps[i];
       if (prop.type === 'table' && !prop.isTipped) {
@@ -398,7 +380,6 @@ const Player = {
           showPrompt('You knocked over the bedside table!');
         }
       } else if (prop.type === 'painting' && !prop.isFallen) {
-        // 3. Wall Painting Knock-Down Check
         const dist = this.position.distanceTo(prop.group.position);
         if (dist < 0.9) {
           prop.isFallen = true;
@@ -505,12 +486,10 @@ const Player = {
   },
 
   fireWeapon(camera) {
-    // Granny Player Bat Strike
     if (GameState.isGP) {
       Viewmodel.triggerBatSwing();
       audio.playBatHit();
 
-      // Check if any survivor is in front of GP
       const hitDist = 2.2;
       for (const [id, peer] of Object.entries(NetworkEngine.peers)) {
         if (peer.mesh && !peer.isGhost) {
@@ -552,13 +531,11 @@ const Player = {
     this.isGhost = true;
     document.getElementById('ghost-indicator').style.display = 'block';
     document.getElementById('stealth-indicator').innerText = 'STATUS: GHOST (SPECTATOR)';
-
-    // Spawn Dead Body Mesh on Floor
     spawnDeadCorpseMesh(scene, corpsePos || this.position);
   }
 };
 
-// 4. INVENTORY & SILENT DROP
+// 4. INVENTORY SYSTEM (SILENT PICKUP & DROP)
 const Inventory = {
   items: [null, null, null, null, null],
 
@@ -586,6 +563,10 @@ const Inventory = {
     return false;
   },
 
+  has(name) {
+    return this.items.some(it => it && it.name === name);
+  },
+
   dropCurrent(camera, scene) {
     const cur = this.items[Player.activeSlot];
     if (!cur) return;
@@ -602,7 +583,6 @@ const Inventory = {
 
     cur.velocity.copy(fwd.clone().multiplyScalar(4).add(new THREE.Vector3(0, 1.8, 0)));
     cur.isGrounded = false;
-    // Silent drop to player: no prompt, dispatches sound to AI Granny
   },
 
   selectSlot(idx) {
@@ -626,7 +606,7 @@ const Inventory = {
   }
 };
 
-// 5. FUN MODE BOUNCY BALLS & ZERO-G SIMULATION
+// 5. FUN MODE SIMULATION
 const FunPhysics = {
   balls: [],
 
@@ -655,7 +635,6 @@ const FunPhysics = {
       const b = this.balls[i];
       b.mesh.position.addScaledVector(b.velocity, dt);
 
-      // Bounce infinitely off world boxes
       for (let j = 0; j < CollisionWorld.boxes.length; j++) {
         const box = CollisionWorld.boxes[j];
         if (box.containsPoint(b.mesh.position)) {
@@ -668,7 +647,7 @@ const FunPhysics = {
   }
 };
 
-// 6. UPDATE PROPS & DOORS INTERPOLATION
+// 6. WORLD PROPS UPDATE
 function updatePhysicsAndWorld(dt) {
   for (let i = 0; i < House.doors.length; i++) {
     const door = House.doors[i];
@@ -859,14 +838,12 @@ const MonsterAI = {
     const fwd = new THREE.Vector3(0, 0, 1).applyEuler(this.mesh.rotation);
     _tempVecA.normalize();
 
-    // 75° Vision Cone
     const angle = fwd.angleTo(_tempVecA);
     if (angle > this.visionAngle) {
       this.lastCanSeeResult = false;
       return false;
     }
 
-    // Proximity agro in same room (unless crouching!)
     if (dist < 4.5 && !Player.isCrouched) {
       this.lastCanSeeResult = true;
       return true;
@@ -999,7 +976,7 @@ const MonsterAI = {
   }
 };
 
-// 8. INPUT & CONTROLLER
+// 8. INPUT & CONTROLLER WITH PAUSE MENU [M] KEY
 const Input = {
   keys: {},
   mouseSens: 0.0022,
@@ -1012,6 +989,7 @@ const Input = {
       if (e.code === 'KeyE') doInteract(camera);
       if (e.code === 'KeyG') Inventory.dropCurrent(camera, scene);
       if (e.code === 'KeyC') toggleCrouch();
+      if (e.code === 'KeyM') togglePauseMenu();
       if (e.code === 'Enter') handleLobbyStartTrigger();
       if (e.code === 'KeyL' && GameState.funMode) {
         FunPhysics.spawnBouncyBall(scene, camera.position, new THREE.Vector3(0, 0, -1).applyEuler(Player.rotation));
@@ -1034,7 +1012,7 @@ const Input = {
     });
 
     window.addEventListener('mousemove', (e) => {
-      if (document.pointerLockElement === container) {
+      if (document.pointerLockElement === container && !GameState.isPaused) {
         Player.rotation.y -= e.movementX * this.mouseSens;
         Player.rotation.x -= e.movementY * this.mouseSens * this.invertY;
         const maxPitch = Player.isHiding ? 0.5 : Math.PI * 0.45;
@@ -1049,7 +1027,7 @@ const Input = {
       const isLocked = document.pointerLockElement === container;
       const inGame = document.getElementById('hud').style.display === 'block';
       document.getElementById('click-to-focus').style.display =
-        (inGame && !isLocked && !document.getElementById('opt-mobile-mode').checked && !Player.isIntroPlaying) ? 'flex' : 'none';
+        (inGame && !isLocked && !document.getElementById('opt-mobile-mode').checked && !Player.isIntroPlaying && !GameState.isPaused) ? 'flex' : 'none';
     });
 
     for (let i = 0; i < 5; i++) {
@@ -1107,6 +1085,7 @@ const Input = {
       Player.rotation.x = Math.max(-Math.PI * 0.42, Math.min(Math.PI * 0.42, Player.rotation.x));
     });
 
+    document.getElementById('m-btn-menu').onclick = togglePauseMenu;
     document.getElementById('m-btn-use').onclick = () => doInteract(camera);
     document.getElementById('m-btn-drop').onclick = () => Inventory.dropCurrent(camera, scene);
     document.getElementById('m-btn-crouch').onclick = toggleCrouch;
@@ -1183,7 +1162,45 @@ function showPrompt(text) {
   p._t = setTimeout(() => { p.style.display = 'none'; }, 2400);
 }
 
-// 9. DAY PROGRESSION, JUMPSCARE & GAME OVER VOTING
+// 9. PAUSE & IN-GAME ACTION MENU ([M] OR MOBILE [MENU])
+function togglePauseMenu() {
+  const pMenu = document.getElementById('pause-menu-modal');
+  const isOpen = pMenu.style.display === 'flex';
+
+  if (isOpen) {
+    pMenu.style.display = 'none';
+    if (GameState.mode === 'sp') GameState.isPaused = false;
+    if (!document.getElementById('opt-mobile-mode').checked) {
+      canvasContainer.requestPointerLock();
+    }
+  } else {
+    pMenu.style.display = 'flex';
+    document.exitPointerLock();
+    if (GameState.mode === 'sp') {
+      GameState.isPaused = true;
+      document.getElementById('pause-menu-title').innerText = 'PAUSED';
+      document.getElementById('pause-menu-sub').innerText = 'Singleplayer paused.';
+    } else {
+      GameState.isPaused = false;
+      document.getElementById('pause-menu-title').innerText = 'GAME MENU';
+      document.getElementById('pause-menu-sub').innerText = 'Multiplayer active in background (no pause).';
+    }
+  }
+}
+
+document.getElementById('btn-pause-resume').onclick = togglePauseMenu;
+document.getElementById('btn-pause-settings').onclick = () => {
+  document.getElementById('settings-modal').style.display = 'flex';
+};
+document.getElementById('btn-pause-stats').onclick = () => {
+  document.getElementById('settings-modal').style.display = 'flex';
+  document.getElementById('tab-btn-prof').click();
+};
+document.getElementById('btn-pause-exit').onclick = () => {
+  window.location.reload();
+};
+
+// 10. DAY PROGRESSION, JUMPSCARE & GAME OVER
 function triggerJumpscare() {
   audio.stopChase();
   audio.playBatHit();
@@ -1287,7 +1304,7 @@ document.getElementById('btn-leave-lobby').onclick = () => {
   window.location.reload();
 };
 
-// 10. HOST LAPTOP TERMINAL HANDLER
+// 11. HOST LAPTOP TERMINAL
 function openHostLaptopTerminal() {
   const modal = document.getElementById('laptop-modal');
   modal.style.display = 'flex';
@@ -1303,7 +1320,7 @@ document.getElementById('btn-close-laptop').onclick = () => {
   document.getElementById('laptop-modal').style.display = 'none';
 };
 
-// 11. 3D LOBBY 10-SECOND START COUNTDOWN
+// 12. 3D LOBBY START COUNTDOWN
 let lobbyCountdownTimer = null;
 let lobbyCountdownVal = 10;
 
@@ -1341,7 +1358,7 @@ function cancelLobbyCountdown() {
   }
 }
 
-// 12. MULTIPLAYER NETWORKING ENGINE
+// 13. MULTIPLAYER NETWORKING
 const NetworkEngine = {
   client: null,
   isHost: false,
@@ -1450,7 +1467,6 @@ const NetworkEngine = {
       head.position.y = 1.65;
       g.add(head);
 
-      // 3D Floating Nameplate
       const nameSprite = createNameplate(data.name || 'Survivor');
       nameSprite.position.y = 2.15;
       g.add(nameSprite);
@@ -1462,7 +1478,7 @@ const NetworkEngine = {
     const p = this.peers[id];
     if (p.mesh) {
       if (data.isGhost) {
-        p.mesh.visible = false; // Ghosts are completely invisible to living players!
+        p.mesh.visible = false;
         return;
       }
       p.mesh.position.set(data.x, data.y, data.z);
@@ -1518,12 +1534,11 @@ function spawnDeadCorpseMesh(scene, pos) {
   scene.add(corpse);
 }
 
-// 13. GAME START & LOBBY DISPATCHER
+// 14. GAME LAUNCH & GP SELECTION
 function launchManorGame() {
   GameState.inGame = true;
   document.getElementById('main-menu').style.display = 'none';
 
-  // Choose Granny Player (GP) if enabled and 5+ players
   const total = Object.keys(NetworkEngine.peers).length + 1;
   if (total >= 5 && document.getElementById('mp-enable-gp').checked) {
     const allIds = [NetworkEngine.myId, ...Object.keys(NetworkEngine.peers)];
@@ -1534,11 +1549,9 @@ function launchManorGame() {
     }
   }
 
-  // Survivor Launch
   document.getElementById('role-badge').style.display = 'block';
   document.getElementById('role-badge').innerText = 'ROLE: SURVIVOR';
 
-  // Survivors spawn in manor
   showDaySequence();
 }
 
@@ -1548,7 +1561,6 @@ function setupAsGrannyPlayer() {
   document.getElementById('role-badge').innerText = 'ROLE: GRANNY (HUNTER)';
   document.getElementById('role-badge').style.background = '#8a0303';
 
-  // 10-Second Sleep Nap Countdown
   const napOverlay = document.getElementById('gp-nap-overlay');
   napOverlay.style.display = 'flex';
   let napSecs = 10;
@@ -1561,19 +1573,17 @@ function setupAsGrannyPlayer() {
       clearInterval(napInterval);
       napOverlay.style.display = 'none';
 
-      // Spawn GP in Basement holding the bat
       Player.position.set(-7.0, -5.8, -6.0);
       Viewmodel.setHeldItem('GP_Bat');
       document.getElementById('hud').style.display = 'block';
-      showPrompt('You woke up! Hunt down all survivors with your bat [LMB / FIRE]!');
+      showPrompt('You woke up! Hunt down survivors with [LMB / FIRE]!');
     }
   }, 1000);
 }
 
-// 14. SETTINGS CONTROLLER (FPS SLIDER 1-1200, UI SCALE 50%-150%)
+// 15. SETTINGS CONTROLLER
 const SettingsEngine = {
   init(renderer, camera, scene) {
-    // Functional FPS Slider (1 - 1200 FPS)
     const fpsSlider = document.getElementById('opt-fps-slider');
     fpsSlider.oninput = (e) => {
       const v = parseInt(e.target.value);
@@ -1582,7 +1592,6 @@ const SettingsEngine = {
       document.getElementById('opt-fps-val').innerText = `${v} FPS`;
     };
 
-    // Functional UI Scale Slider (50% - 150%)
     const uiSlider = document.getElementById('opt-uiscale');
     uiSlider.oninput = (e) => {
       const scale = parseFloat(e.target.value);
@@ -1600,9 +1609,7 @@ const SettingsEngine = {
     const gammaEl = document.getElementById('opt-gamma');
     gammaEl.oninput = (e) => {
       const v = parseFloat(e.target.value);
-      scene.children.forEach(c => {
-        if (c.isAmbientLight) c.intensity = 0.35 * v;
-      });
+      ambLight.intensity = 0.45 * v;
       document.getElementById('opt-gamma-val').innerText = `${v.toFixed(1)}`;
     };
 
@@ -1616,9 +1623,9 @@ const SettingsEngine = {
     fogEl.onchange = (e) => {
       const v = e.target.value;
       if (v === 'none') scene.fog.density = 0;
-      else if (v === 'light') scene.fog.density = 0.04;
-      else if (v === 'normal') scene.fog.density = 0.07;
-      else if (v === 'heavy') scene.fog.density = 0.12;
+      else if (v === 'light') scene.fog.density = 0.02;
+      else if (v === 'normal') scene.fog.density = 0.035;
+      else if (v === 'heavy') scene.fog.density = 0.08;
     };
 
     const sensEl = document.getElementById('opt-sens');
@@ -1664,7 +1671,7 @@ const SettingsEngine = {
   }
 };
 
-// 15. MAIN RUNTIME LOOP & THROTTLED 1-1200 FPS CONTROLLER
+// 16. RUNTIME INITIALIZATION & GAME STATE
 const GameState = {
   mode: 'sp',
   difficulty: 'normal',
@@ -1673,6 +1680,7 @@ const GameState = {
   inGame: false,
   isGP: false,
   funMode: false,
+  isPaused: false,
   restartVotes: 0,
   playerStats: { escapes: 0, deaths: 0, stuns: 0, days: 0 }
 };
@@ -1685,8 +1693,8 @@ const EngineLimiter = {
 
 const canvasContainer = document.getElementById('canvas-container');
 const scene = new THREE.Scene();
-scene.background = new THREE.Color(0x040404);
-scene.fog = new THREE.FogExp2(0x040404, 0.07);
+scene.background = new THREE.Color(0x0c0b0a);
+scene.fog = new THREE.FogExp2(0x0c0b0a, 0.035);
 
 const camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 80);
 scene.add(camera);
@@ -1694,12 +1702,24 @@ scene.add(camera);
 const renderer = new THREE.WebGLRenderer({ antialias: false, powerPreference: 'high-performance' });
 renderer.setSize(window.innerWidth, window.innerHeight);
 renderer.setPixelRatio(Math.min(window.devicePixelRatio, 1.5));
-renderer.shadowMap.enabled = true;
-renderer.shadowMap.type = THREE.PCFShadowMap;
 canvasContainer.appendChild(renderer.domElement);
 
-const ambLight = new THREE.AmbientLight(0x353535);
+// Increased base ambient light
+const ambLight = new THREE.AmbientLight(0x555555);
 scene.add(ambLight);
+
+// Point lights in Manor
+const bedroomLamp = new THREE.PointLight(0xffb055, 1.8, 16);
+bedroomLamp.position.set(-8, 9.5, 8);
+scene.add(bedroomLamp);
+
+const foyerLamp = new THREE.PointLight(0xffdd99, 1.8, 20);
+foyerLamp.position.set(0, 4.2, 8);
+scene.add(foyerLamp);
+
+const basementLight = new THREE.PointLight(0x66cc88, 1.5, 18);
+basementLight.position.set(-4, -3.5, -4);
+scene.add(basementLight);
 
 House.build(scene);
 Player.init(camera, scene);
@@ -1710,20 +1730,31 @@ SettingsEngine.init(renderer, camera, scene);
 CareerStats.load();
 
 const showScreen = (id) => {
-  ['main-menu', 'sp-modal', 'mp-modal', 'wardrobe-modal', 'settings-modal'].forEach(s => {
+  ['main-menu', 'sp-modal', 'mp-modal', 'wardrobe-modal', 'settings-modal', 'pause-menu-modal'].forEach(s => {
     document.getElementById(s).style.display = (s === id) ? 'flex' : 'none';
   });
 };
 
 document.getElementById('btn-singleplayer').onclick = () => showScreen('sp-modal');
-document.getElementById('btn-multiplayer').onclick = () => showScreen('mp-modal');
+document.getElementById('btn-multiplayer').onclick = () => {
+  showScreen('mp-modal');
+  document.getElementById('mp-lobby-browser').style.display = 'block';
+  document.getElementById('mp-create-box').style.display = 'none';
+  document.getElementById('row-mp-back').style.display = 'flex';
+};
 document.getElementById('btn-wardrobe').onclick = () => showScreen('wardrobe-modal');
 document.getElementById('btn-settings').onclick = () => showScreen('settings-modal');
 
 document.getElementById('sp-back').onclick = () => showScreen('main-menu');
 document.getElementById('btn-mp-back').onclick = () => showScreen('main-menu');
 document.getElementById('wardrobe-back').onclick = () => showScreen('main-menu');
-document.getElementById('settings-back').onclick = () => showScreen('main-menu');
+document.getElementById('settings-back').onclick = () => {
+  if (GameState.inGame) {
+    document.getElementById('settings-modal').style.display = 'none';
+  } else {
+    showScreen('main-menu');
+  }
+};
 
 document.getElementById('sp-start').onclick = () => {
   GameState.mode = 'sp';
@@ -1742,20 +1773,44 @@ document.getElementById('sp-start').onclick = () => {
   showDaySequence();
 };
 
+// FIX FOR MULTIPLAYER "+ CREATE" BUTTON (PROPERLY SHOWS CUSTOMIZE OPTIONS)
+document.getElementById('btn-show-create-lobby').onclick = () => {
+  document.getElementById('mp-lobby-browser').style.display = 'none';
+  document.getElementById('mp-create-box').style.display = 'block';
+  document.getElementById('row-mp-back').style.display = 'none';
+};
+
+document.getElementById('btn-cancel-create').onclick = () => {
+  document.getElementById('mp-create-box').style.display = 'none';
+  document.getElementById('mp-lobby-browser').style.display = 'block';
+  document.getElementById('row-mp-back').style.display = 'flex';
+};
+
+// Dynamic display of GP Mode & Fun Mode (ONLY IF MAX PLAYERS >= 5)
 document.getElementById('mp-max-players').oninput = (e) => {
   const v = parseInt(e.target.value);
   document.getElementById('mp-max-players-val').innerText = v;
-  document.getElementById('row-player-granny').style.display = (v >= 5) ? 'flex' : 'none';
+  const is5OrMore = v >= 5;
+  document.getElementById('row-player-granny').style.display = is5OrMore ? 'flex' : 'none';
+  document.getElementById('row-funmode').style.display = is5OrMore ? 'flex' : 'none';
+  if (!is5OrMore) {
+    document.getElementById('mp-enable-gp').checked = false;
+    document.getElementById('mp-funmode').checked = false;
+  }
 };
 
+// HOST AND HOP IN LOBBY BUTTON
 document.getElementById('btn-commit-create-lobby').onclick = () => {
   NetworkEngine.isHost = true;
   NetworkEngine.roomCode = 'SAH-' + Math.floor(10 + Math.random() * 89);
   NetworkEngine.roomName = document.getElementById('mp-room-name').value.trim();
   NetworkEngine.maxPlayers = parseInt(document.getElementById('mp-max-players').value);
 
-  // Check if room name activates Fun Mode
-  if (NetworkEngine.roomName.toUpperCase() === 'FUN TIME') {
+  GameState.mode = 'mp';
+  GameState.difficulty = document.getElementById('mp-diff').value;
+  MonsterAI.applyDifficultySettings();
+
+  if (document.getElementById('mp-funmode').checked || NetworkEngine.roomName.toUpperCase() === 'FUN TIME') {
     GameState.funMode = true;
     document.getElementById('m-btn-spawn').style.display = 'flex';
     document.getElementById('m-btn-up').style.display = 'flex';
@@ -1792,10 +1847,9 @@ document.getElementById('btn-join-code').onclick = () => {
         skin: document.getElementById('wardrobe-skin').value
       }
     });
-    // Joiner spawns inside 3D Lobby
     Player.position.set(60.0, 30.0, 2.0);
     document.getElementById('hud').style.display = 'block';
-    showPrompt('Entered 3D Waiting Room! Waiting for host to start...');
+    showPrompt('Entered 3D Lobby! Waiting for host to start...');
   }
 };
 
@@ -1834,7 +1888,7 @@ function renderLobbyCard(data) {
   list.appendChild(div);
 }
 
-// 16. THROTTLED 1-1200 FPS GAME ENGINE LOOP
+// 17. THROTTLED 1-1200 FPS ENGINE LOOP
 setInterval(() => { NetworkEngine.tickSync(); }, 50);
 
 function gameLoop() {
@@ -1843,15 +1897,17 @@ function gameLoop() {
   const now = performance.now();
   const elapsed = now - EngineLimiter.lastFrameTime;
 
-  // FPS Limiter: Throttles to exact targetFPS (1 - 1200 FPS)
   if (elapsed < EngineLimiter.frameInterval) return;
   EngineLimiter.lastFrameTime = now - (elapsed % EngineLimiter.frameInterval);
 
-  const dt = Math.min(elapsed / 1000, 0.05);
+  // Pause in singleplayer stops delta time progression
+  const dt = GameState.isPaused ? 0 : Math.min(elapsed / 1000, 0.05);
 
-  Player.update(dt, camera);
-  MonsterAI.update(dt);
-  updatePhysicsAndWorld(dt);
+  if (!GameState.isPaused) {
+    Player.update(dt, camera);
+    MonsterAI.update(dt);
+    updatePhysicsAndWorld(dt);
+  }
 
   renderer.render(scene, camera);
 }
