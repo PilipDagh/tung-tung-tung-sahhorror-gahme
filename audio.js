@@ -1,5 +1,5 @@
 /* =========================================================================
-   AUDIO.JS - CUSTOM SOUND ENGINE (SILENT IF AUDIO FILES NOT FOUND)
+   AUDIO.JS - CUSTOM SOUND ENGINE (SILENT IF AUDIO FILES NOT DETECTED)
    ========================================================================= */
 class DualAudioEngine {
   constructor() {
@@ -10,7 +10,7 @@ class DualAudioEngine {
     this.sfxGain = null;
     this.musicGain = null;
 
-    // Relative audio paths in your GitHub repository
+    // Relative audio file paths in your repository
     this.soundFiles = {
       chase: 'audio/sahur_chase.mp3',
       tung: 'audio/tung.mp3',
@@ -33,20 +33,24 @@ class DualAudioEngine {
       const AudioCtx = window.AudioContext || window.webkitAudioContext;
       this.ctx = new AudioCtx();
 
+      // Master Gain
       this.masterGain = this.ctx.createGain();
       this.masterGain.gain.value = 1.0;
       this.masterGain.connect(this.ctx.destination);
 
+      // SFX Sub-Bus
       this.sfxGain = this.ctx.createGain();
       this.sfxGain.gain.value = 1.0;
       this.sfxGain.connect(this.masterGain);
 
+      // Music / Chase Sub-Bus
       this.musicGain = this.ctx.createGain();
       this.musicGain.gain.value = 1.0;
       this.musicGain.connect(this.masterGain);
 
       this.preloadLocalAudio();
     }
+
     if (this.ctx.state === 'suspended') {
       this.ctx.resume();
     }
@@ -65,10 +69,10 @@ class DualAudioEngine {
         if (res.ok) {
           const arr = await res.arrayBuffer();
           this.loadedBuffers[key] = await this.ctx.decodeAudioData(arr);
-          console.log(`[Audio Engine] Custom audio file found & loaded: ${path}`);
+          console.log(`[Audio Engine] Custom audio file loaded: ${path}`);
         }
       } catch (e) {
-        // Missing audio remains completely silent as requested
+        // Missing audio will remain completely silent
       }
     }
   }
@@ -156,4 +160,5 @@ class DualAudioEngine {
     this.playFile('jumpscare', this.sfxGain);
   }
 }
+
 const audio = new DualAudioEngine();
