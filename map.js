@@ -1,6 +1,6 @@
 /* =========================================================================
-   MAP.JS - AUTHENTIC BRIGHTENED TEXTURES, ZERO-GAP FLOORS, 3D LOBBY,
-   REAL 3D HOLLOW DRAWERS, KNOCK-DOWN PAINTINGS & 7 ITEM SPAWN PRESETS
+   MAP.JS - 1:1 BLUEPRINT MANOR, 3D LOBBY, REAL 3D DRAWERS, KNOCK-DOWN
+   PAINTINGS, SEAMLESS ZERO-GAP FLOORS & 7 RANDOM ITEM SPAWN PRESETS
    ========================================================================= */
 
 const Assets = {
@@ -32,7 +32,6 @@ const Assets = {
         ctx.bezierCurveTo(160, y + (Math.random() - 0.5) * 25, 340, y + (Math.random() - 0.5) * 25, 512, y);
         ctx.stroke();
       }
-      // Plank Separator Grooves
       for (let x = 0; x < 512; x += 128) {
         ctx.fillStyle = '#3a2414'; ctx.fillRect(x, 0, 4, 512);
       }
@@ -50,7 +49,6 @@ const Assets = {
           ctx.beginPath(); ctx.arc(x + 24, y + 24, 7, 0, Math.PI * 2); ctx.fill();
         }
       }
-      // Stains & Grime
       for (let i = 0; i < 600; i++) {
         ctx.fillStyle = `rgba(40, 36, 25, ${Math.random() * 0.22})`;
         ctx.fillRect(Math.random() * 512, Math.random() * 512, 4, 4);
@@ -58,7 +56,7 @@ const Assets = {
       return new THREE.CanvasTexture(c);
     };
 
-    // 3. "Tung Tung Tung Sahur" Poster Texture
+    // 3. "Tung Tung Tung Sahur" Poster Texture for Lobby
     const makePosterTexture = () => {
       const c = document.createElement('canvas'); c.width = 256; c.height = 320;
       const ctx = c.getContext('2d');
@@ -67,7 +65,6 @@ const Assets = {
       ctx.fillStyle = '#ffffff'; ctx.font = 'bold 22px monospace'; ctx.textAlign = 'center';
       ctx.fillText('TUNG TUNG TUNG', 128, 52);
       ctx.fillText('SAHUR!', 128, 84);
-      // Drum silhouette
       ctx.fillStyle = '#4a2815'; ctx.fillRect(68, 115, 120, 130);
       ctx.fillStyle = '#ff3333'; ctx.font = 'bold 16px monospace';
       ctx.fillText('WAKE UP!', 128, 280);
@@ -144,19 +141,16 @@ const House = {
     };
 
     // =========================================================================
-    // SECTION A: 3D AMONG US-STYLE MULTIPLAYER LOBBY ROOM (ISOLATED OFF-MANOR)
+    // SECTION A: 3D AMONG US-STYLE MULTIPLAYER LOBBY ROOM
     // =========================================================================
     const lobbyY = 30.0;
-    // Lobby Floor & Ceiling ($16 \times 16\text{m}$)
     makeSolidBox(16, 0.4, 16, 60.0, lobbyY - 0.2, 0.0, Assets.concreteMat);
     makeSolidBox(16, 0.4, 16, 60.0, lobbyY + 5.0, 0.0, Assets.ceilingMat);
-    // Lobby Enclosure Walls
     makeSolidBox(16, 5.0, 0.4, 60.0, lobbyY + 2.5, -8.0, Assets.wallMat, true);
     makeSolidBox(16, 5.0, 0.4, 60.0, lobbyY + 2.5, 8.0, Assets.wallMat, true);
     makeSolidBox(0.4, 5.0, 16, 52.0, lobbyY + 2.5, 0.0, Assets.wallMat, true);
     makeSolidBox(0.4, 5.0, 16, 68.0, lobbyY + 2.5, 0.0, Assets.wallMat, true);
 
-    // Posters of "Tung Tung Tung Sahur" on Lobby Walls
     const poster1 = new THREE.Mesh(new THREE.BoxGeometry(1.6, 2.0, 0.05), Assets.posterMat);
     poster1.position.set(57.5, lobbyY + 2.6, -7.75);
     scene.add(poster1);
@@ -164,34 +158,29 @@ const House = {
     poster2.position.set(62.5, lobbyY + 2.6, -7.75);
     scene.add(poster2);
 
-    // Big 3D Elephant in Center with "ADDRESS ME!" Signboard
     this.buildLobbyElephant(scene, 60.0, lobbyY, 0.0);
-
-    // Interactive Wardrobe Closet in Lobby Room
     this.buildLobbyWardrobe(scene, 53.2, lobbyY, -5.0);
-
-    // Host Laptop Terminal Table in Lobby Room
     this.buildHostLaptopTable(scene, 66.8, lobbyY, 2.0);
 
     // =========================================================================
-    // SECTION B: CONTINUOUS MANOR FLOORS (SEAMLESS - ZERO GAPS)
+    // SECTION B: CONTINUOUS MANOR FLOORS (ZERO GAPS / ZERO HOLES)
     // =========================================================================
     // Basement Floor: Surface is exactly Y = -6.0
     makeSolidBox(36, 0.4, 36, 0, -6.2, 0, Assets.concreteMat);
 
-    // Ground Floor: Surface is exactly Y = 0.0 (Seamless surrounding stair openings)
+    // Ground Floor: Surface is exactly Y = 0.0
     makeSolidBox(21.2, 0.4, 36, -7.4, -0.2, 0, Assets.woodMat);
     makeSolidBox(11.2, 0.4, 36, 12.4, -0.2, 0, Assets.woodMat);
     makeSolidBox(3.6, 0.4, 21.8, 5.0, -0.2, -7.1, Assets.woodMat);
     makeSolidBox(3.6, 0.4, 4.0, 5.0, -0.2, 16.0, Assets.woodMat);
 
-    // Upstairs Floor: Surface is exactly Y = 6.0 (Continuous with zero gaps)
+    // Upstairs Floor: Surface is exactly Y = 6.0
     makeSolidBox(21.2, 0.4, 36, -7.4, 5.8, 0, Assets.woodMat);
     makeSolidBox(11.2, 0.4, 36, 12.4, 5.8, 0, Assets.woodMat);
     makeSolidBox(3.6, 0.4, 21.8, 5.0, 5.8, -7.1, Assets.woodMat);
     makeSolidBox(3.6, 0.4, 4.0, 5.0, 5.8, 16.0, Assets.woodMat);
 
-    // Attic Floor / Upstairs Ceiling: Surface is exactly Y = 11.5
+    // Attic Floor: Surface is exactly Y = 11.5
     makeSolidBox(36, 0.4, 36, 0, 11.3, 0, Assets.ceilingMat);
 
     // Outer Perimeter Manor Walls
@@ -212,7 +201,7 @@ const House = {
       makeSolidBox(3.4, stepH, 0.75, 5.0, stepTop - stepH / 2, stepZ, Assets.woodMat);
     }
 
-    // 2. BASEMENT STAIRS (Fixed Blueprint Placement: Descends from Z = -0.5 to Z = -8.75)
+    // 2. Basement Stairs: Descends from Z = -0.5 to Z = -8.75 down to Basement
     const steps2 = 15;
     for (let i = 0; i < steps2; i++) {
       const stepH = 0.4;
@@ -237,7 +226,7 @@ const House = {
     // Partition Wall between Bedrooms
     makeSolidBox(0.4, 5.6, 16, -1, 8.8, 10, Assets.wallMat, true);
 
-    // THE STARTING BED (Elevated Frame + Under-Bed Hiding Spot)
+    // THE STARTING BED (Hollow Underside for Hiding)
     const bedGroup = new THREE.Group();
     const legGeo = new THREE.BoxGeometry(0.18, 0.8, 0.18);
     const l1 = new THREE.Mesh(legGeo, Assets.woodMat); l1.position.set(-1.6, 0.4, -2.4); bedGroup.add(l1);
@@ -260,7 +249,6 @@ const House = {
     bedGroup.position.set(-9.0, 6.0, 9.5);
     scene.add(bedGroup);
 
-    // Bed Collision Box (Mattress only, leaves underneath clear)
     CollisionWorld.addBox(-10.8, 6.6, 7.0, -7.2, 8.0, 12.1, true);
 
     this.hidingSpots.push({
@@ -279,7 +267,7 @@ const House = {
     // Wardrobe Closet
     this.buildWardrobeCloset(scene, -13.5, 6.0, 5.0);
 
-    // Knock-Down Wall Paintings (Fall & clatter when bumped)
+    // Knock-Down Wall Paintings (Fall & clatter on collision)
     this.buildKnockdownPainting(scene, -8.0, 8.5, 2.22, 0);
     this.buildKnockdownPainting(scene, -1.22, 8.5, 7.0, Math.PI * 0.5);
     this.buildKnockdownPainting(scene, -7.0, 2.5, 17.65, 0);
@@ -360,7 +348,7 @@ const House = {
             this.locks.master = false;
             CollisionWorld.removeBox(doorCollider);
             triggerVictory('Escaped through the Front Door of the Manor!');
-            return 'Turned Master Key! You pushed the door open to freedom!';
+            return 'Turned Master Key! You are free!';
           }
           return 'Master deadbolt is locked. Needs Master Key.';
         }
@@ -547,24 +535,20 @@ const House = {
   buildLobbyElephant(scene, x, y, z) {
     const elephant = new THREE.Group();
 
-    // Body
     const body = new THREE.Mesh(new THREE.SphereGeometry(1.6, 12, 10), Assets.elephantMat);
     body.scale.set(1.1, 0.95, 1.4);
     body.position.y = 1.9;
     elephant.add(body);
 
-    // Head
     const head = new THREE.Mesh(new THREE.SphereGeometry(0.9, 10, 10), Assets.elephantMat);
     head.position.set(0, 2.3, 1.5);
     elephant.add(head);
 
-    // Trunk
     const trunk = new THREE.Mesh(new THREE.CylinderGeometry(0.18, 0.08, 1.4, 8), Assets.elephantMat);
     trunk.rotation.x = -0.3;
     trunk.position.set(0, 1.3, 2.1);
     elephant.add(trunk);
 
-    // Ears
     const earGeo = new THREE.BoxGeometry(0.1, 0.8, 0.8);
     const leftEar = new THREE.Mesh(earGeo, Assets.elephantMat);
     leftEar.position.set(-0.95, 2.4, 1.4);
@@ -575,14 +559,12 @@ const House = {
     rightEar.rotation.y = 0.35;
     elephant.add(rightEar);
 
-    // 4 Sturdy Legs
     const legGeo = new THREE.CylinderGeometry(0.28, 0.28, 1.3, 8);
     const l1 = new THREE.Mesh(legGeo, Assets.elephantMat); l1.position.set(-0.75, 0.65, 0.8); elephant.add(l1);
     const l2 = new THREE.Mesh(legGeo, Assets.elephantMat); l2.position.set(0.75, 0.65, 0.8); elephant.add(l2);
     const l3 = new THREE.Mesh(legGeo, Assets.elephantMat); l3.position.set(-0.75, 0.65, -0.8); elephant.add(l3);
     const l4 = new THREE.Mesh(legGeo, Assets.elephantMat); l4.position.set(0.75, 0.65, -0.8); elephant.add(l4);
 
-    // Signboard Placard: "ADDRESS ME!"
     const boardCanvas = document.createElement('canvas'); boardCanvas.width = 256; boardCanvas.height = 96;
     const bCtx = boardCanvas.getContext('2d');
     bCtx.fillStyle = '#0a0a0a'; bCtx.fillRect(0, 0, 256, 96);
@@ -944,7 +926,7 @@ const House = {
         if (inv.add(record)) {
           if (group.parent) group.parent.remove(group);
           record.inInventory = true;
-          return ''; // Silent pickup to user
+          return '';
         }
         return 'Inventory is full!';
       }
