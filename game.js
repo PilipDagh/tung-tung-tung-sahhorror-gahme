@@ -1,5 +1,5 @@
 /* =========================================================================
-   GAME.JS - CAMERA LIGHTING, PAUSE MENU, SAFE LOBBY CREATION & AI CONTROLLER
+   GAME.JS - COMPLETE CONTROLLER, PAUSE MENU, SAFE LOBBY CREATION & LIGHTING
    ========================================================================= */
 
 const _tempVecA = new THREE.Vector3();
@@ -110,7 +110,7 @@ const Viewmodel = {
     key.add(stem);
     this.models['GenericKey'] = key;
 
-    // Granny Player (GP) Mallet Bat Viewmodel
+    // GP Mallet Bat Viewmodel
     const batGroup = new THREE.Group();
     const batMesh = new THREE.Mesh(new THREE.CylinderGeometry(0.045, 0.07, 1.1, 8), Assets.woodMat);
     batMesh.position.set(0.1, 0.1, -0.2);
@@ -192,7 +192,7 @@ const Player = {
     camera.add(this.flashlight);
     camera.add(this.flashlight.target);
 
-    // 2. High-Visibility Camera Proximity Fill Light (Prevents pitch black near corners)
+    // 2. High-Visibility Camera Proximity Fill Light
     this.fillLight = new THREE.PointLight(0xffeedd, 1.2, 14);
     this.fillLight.position.set(0, 0, 0.2);
     camera.add(this.fillLight);
@@ -721,7 +721,7 @@ function updatePhysicsAndWorld(dt) {
   }
 }
 
-// 7. GRANNY TUNG TUNG SAHUR AI
+// 7. GRANNY TUNG TUNG SAHUR AI (REALISTIC CONE VISION & PROXIMITY AGGRO)
 const MonsterAI = {
   mesh: null,
   state: 'PATROL',
@@ -849,14 +849,14 @@ const MonsterAI = {
     const fwd = new THREE.Vector3(0, 0, 1).applyEuler(this.mesh.rotation);
     _tempVecA.normalize();
 
-    // 75° Vision Cone: if her back is turned, she CANNOT see you!
+    // 75° Vision Cone
     const angle = fwd.angleTo(_tempVecA);
     if (angle > this.visionAngle) {
       this.lastCanSeeResult = false;
       return false;
     }
 
-    // Proximity agro in same room (unless crouching!)
+    // Proximity aggro in same room (unless crouching)
     if (dist < 4.5 && !Player.isCrouched) {
       this.lastCanSeeResult = true;
       return true;
@@ -1718,7 +1718,7 @@ renderer.setSize(window.innerWidth, window.innerHeight);
 renderer.setPixelRatio(Math.min(window.devicePixelRatio, 1.5));
 canvasContainer.appendChild(renderer.domElement);
 
-// Increased Base Ambient Light to Prevent Pitch-Black Darkness
+// Base Ambient Light
 const ambLight = new THREE.AmbientLight(0xffeedd, 0.95);
 scene.add(ambLight);
 
@@ -1781,7 +1781,7 @@ document.getElementById('sp-start').onclick = () => {
   GameState.difficulty = document.getElementById('sp-diff').value;
   GameState.funMode = document.getElementById('sp-funmode').checked;
 
-  // Strict enforcement: Fun Mode touch buttons are completely hidden if Fun Mode is OFF
+  // Enforce Clean Fun Mode Mobile Button Visibility
   const funDisplay = GameState.funMode ? 'flex' : 'none';
   document.getElementById('m-btn-spawn').style.display = funDisplay;
   document.getElementById('m-btn-up').style.display = funDisplay;
@@ -1793,7 +1793,7 @@ document.getElementById('sp-start').onclick = () => {
   showDaySequence();
 };
 
-// MULTIPLAYER "+ CREATE" TOGGLE HANDLER (FIXED)
+// MULTIPLAYER "+ CREATE" TOGGLE HANDLERS (FIXED)
 document.getElementById('btn-show-create-lobby').onclick = () => {
   document.getElementById('mp-lobby-browser').style.display = 'none';
   document.getElementById('mp-create-box').style.display = 'block';
@@ -1819,7 +1819,7 @@ document.getElementById('mp-max-players').oninput = (e) => {
   }
 };
 
-// HOST AND HOP IN LOBBY BUTTON (FIXED SAFE SPAWN)
+// HOST AND HOP IN LOBBY BUTTON
 document.getElementById('btn-commit-create-lobby').onclick = () => {
   NetworkEngine.isHost = true;
   NetworkEngine.roomCode = 'SAH-' + Math.floor(10 + Math.random() * 89);
