@@ -164,7 +164,7 @@ const Viewmodel = {
   }
 };
 
-// 3. PLAYER CONTROLLER WITH SAFE CAMERA LIGHTING (ELIMINATES BLACK SCREENS)
+// 3. PLAYER CONTROLLER WITH BRIGHT CAMERA-MOUNTED LIGHTING (NO BLACK SCREENS)
 const Player = {
   position: new THREE.Vector3(60.0, 30.0, 2.0),
   velocity: new THREE.Vector3(),
@@ -185,14 +185,15 @@ const Player = {
   isGrounded: false,
 
   init(camera, scene) {
-    // CAMERA-ATTACHED DUAL LIGHTING: Spot beam + ambient proximity fill
-    this.flashlight = new THREE.SpotLight(0xfff6ea, 3.5, 35, Math.PI * 0.32, 0.5, 1.0);
+    // 1. Wide Primary Flashlight Beam attached directly to camera
+    this.flashlight = new THREE.SpotLight(0xfff6ea, 4.0, 40, Math.PI * 0.35, 0.5, 1.0);
     this.flashlight.position.set(0.2, -0.15, 0.1);
     this.flashlight.target.position.set(0, -0.1, -6);
     camera.add(this.flashlight);
     camera.add(this.flashlight.target);
 
-    this.fillLight = new THREE.PointLight(0xffeedd, 0.8, 10);
+    // 2. High-Visibility Camera Proximity Fill Light (Prevents pitch black near corners)
+    this.fillLight = new THREE.PointLight(0xffeedd, 1.2, 14);
     this.fillLight.position.set(0, 0, 0.2);
     camera.add(this.fillLight);
 
@@ -204,7 +205,7 @@ const Player = {
     this.introTimer = 0;
     this.isHiding = false;
     this.position.set(-9.0, 6.0, 9.8);
-    // Tilted forward across bedroom looking toward nightstand and door
+    // Tilted forward across bedroom looking toward nightstand, floor, and door
     this.rotation.set(0.25, -0.4, 0);
 
     if (camera) {
@@ -219,11 +220,15 @@ const Player = {
     this.isHiding = false;
 
     const eyelid = document.getElementById('eyelid-overlay');
-    eyelid.style.opacity = '0.9';
+    eyelid.style.display = 'block';
+    eyelid.style.opacity = '0.85';
 
-    setTimeout(() => { eyelid.style.opacity = '0.3'; }, 400);
-    setTimeout(() => { eyelid.style.opacity = '0.85'; }, 800);
-    setTimeout(() => { eyelid.style.opacity = '0.0'; }, 1300);
+    setTimeout(() => { eyelid.style.opacity = '0.2'; }, 350);
+    setTimeout(() => { eyelid.style.opacity = '0.7'; }, 700);
+    setTimeout(() => {
+      eyelid.style.opacity = '0.0';
+      setTimeout(() => { eyelid.style.display = 'none'; }, 400);
+    }, 1100);
   },
 
   update(dt, camera) {
@@ -340,7 +345,7 @@ const Player = {
   checkDynamicCollisions(moveDir, speed) {
     const now = performance.now();
 
-    // Kick/push dynamic physics items on floor
+    // Push physical items on floor
     for (let i = 0; i < House.physicsItems.length; i++) {
       const item = House.physicsItems[i];
       if (item.inInventory) continue;
@@ -716,7 +721,7 @@ function updatePhysicsAndWorld(dt) {
   }
 }
 
-// 7. GRANNY TUNG TUNG SAHUR AI (REALISTIC FORWARD CONE VISION & PROXIMITY AGGRO)
+// 7. GRANNY TUNG TUNG SAHUR AI
 const MonsterAI = {
   mesh: null,
   state: 'PATROL',
@@ -1617,7 +1622,7 @@ const SettingsEngine = {
     const gammaEl = document.getElementById('opt-gamma');
     gammaEl.oninput = (e) => {
       const v = parseFloat(e.target.value);
-      ambLight.intensity = 0.75 * v;
+      ambLight.intensity = 0.95 * v;
       document.getElementById('opt-gamma-val').innerText = `${v.toFixed(1)}`;
     };
 
@@ -1631,9 +1636,9 @@ const SettingsEngine = {
     fogEl.onchange = (e) => {
       const v = e.target.value;
       if (v === 'none') scene.fog.near = 999;
-      else if (v === 'light') { scene.fog.near = 20; scene.fog.far = 70; }
-      else if (v === 'normal') { scene.fog.near = 12; scene.fog.far = 50; }
-      else if (v === 'heavy') { scene.fog.near = 5; scene.fog.far = 25; }
+      else if (v === 'light') { scene.fog.near = 35; scene.fog.far = 100; }
+      else if (v === 'normal') { scene.fog.near = 25; scene.fog.far = 90; }
+      else if (v === 'heavy') { scene.fog.near = 10; scene.fog.far = 35; }
     };
 
     const sensEl = document.getElementById('opt-sens');
@@ -1701,11 +1706,11 @@ const EngineLimiter = {
 
 const canvasContainer = document.getElementById('canvas-container');
 const scene = new THREE.Scene();
-scene.background = new THREE.Color(0x1a1815);
+scene.background = new THREE.Color(0x2d2925);
 // Soft linear fog that NEVER blacks out nearby rooms
-scene.fog = new THREE.Fog(0x1a1815, 12, 50);
+scene.fog = new THREE.Fog(0x2d2925, 25, 90);
 
-const camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 80);
+const camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 90);
 scene.add(camera);
 
 const renderer = new THREE.WebGLRenderer({ antialias: false, powerPreference: 'high-performance' });
@@ -1713,20 +1718,25 @@ renderer.setSize(window.innerWidth, window.innerHeight);
 renderer.setPixelRatio(Math.min(window.devicePixelRatio, 1.5));
 canvasContainer.appendChild(renderer.domElement);
 
-// Increased Base Ambient Light to Prevent Pitch-Black Mud
-const ambLight = new THREE.AmbientLight(0xffeedd, 0.75);
+// Increased Base Ambient Light to Prevent Pitch-Black Darkness
+const ambLight = new THREE.AmbientLight(0xffeedd, 0.95);
 scene.add(ambLight);
 
-// Room Lamps in Manor
-const bedroomLamp = new THREE.PointLight(0xffb055, 2.0, 20);
+// Overhead Directional Light
+const sunLight = new THREE.DirectionalLight(0xffeedd, 0.6);
+sunLight.position.set(0, 20, 0);
+scene.add(sunLight);
+
+// High-Visibility Room Point Lamps in Manor
+const bedroomLamp = new THREE.PointLight(0xffb055, 2.5, 25);
 bedroomLamp.position.set(-8, 9.5, 8);
 scene.add(bedroomLamp);
 
-const foyerLamp = new THREE.PointLight(0xffdd99, 2.0, 22);
+const foyerLamp = new THREE.PointLight(0xffdd99, 2.5, 25);
 foyerLamp.position.set(0, 4.2, 8);
 scene.add(foyerLamp);
 
-const basementLight = new THREE.PointLight(0x66cc88, 1.8, 20);
+const basementLight = new THREE.PointLight(0x77dd99, 2.0, 22);
 basementLight.position.set(-4, -3.5, -4);
 scene.add(basementLight);
 
@@ -1771,7 +1781,7 @@ document.getElementById('sp-start').onclick = () => {
   GameState.difficulty = document.getElementById('sp-diff').value;
   GameState.funMode = document.getElementById('sp-funmode').checked;
 
-  // Enforce Clean Fun Mode Mobile Button Visibility
+  // Strict enforcement: Fun Mode touch buttons are completely hidden if Fun Mode is OFF
   const funDisplay = GameState.funMode ? 'flex' : 'none';
   document.getElementById('m-btn-spawn').style.display = funDisplay;
   document.getElementById('m-btn-up').style.display = funDisplay;
@@ -1783,7 +1793,7 @@ document.getElementById('sp-start').onclick = () => {
   showDaySequence();
 };
 
-// MULTIPLAYER "+ CREATE" TOGGLE HANDLERS
+// MULTIPLAYER "+ CREATE" TOGGLE HANDLER (FIXED)
 document.getElementById('btn-show-create-lobby').onclick = () => {
   document.getElementById('mp-lobby-browser').style.display = 'none';
   document.getElementById('mp-create-box').style.display = 'block';
@@ -1809,7 +1819,7 @@ document.getElementById('mp-max-players').oninput = (e) => {
   }
 };
 
-// HOST AND HOP IN LOBBY BUTTON
+// HOST AND HOP IN LOBBY BUTTON (FIXED SAFE SPAWN)
 document.getElementById('btn-commit-create-lobby').onclick = () => {
   NetworkEngine.isHost = true;
   NetworkEngine.roomCode = 'SAH-' + Math.floor(10 + Math.random() * 89);
