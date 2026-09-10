@@ -11,6 +11,7 @@
   <script src="https://cdnjs.cloudflare.com/ajax/libs/paho-mqtt/1.0.1/mqttws31.min.js"></script>
 </head>
 <body>
+  <!-- 3D WEBGL VIEWPORT -->
   <div id="canvas-container"></div>
   <div id="crosshair" class="reticle-dot"></div>
   <div id="eyelid-overlay"></div>
@@ -65,7 +66,7 @@
     <div style="font-size:11px;color:#aaa;margin-top:3px;">If a player joins or leaves, countdown cancels!</div>
   </div>
 
-  <!-- MOBILE CONTROLS -->
+  <!-- MOBILE ON-SCREEN CONTROLS -->
   <div id="mobile-controls">
     <div class="touch-zone" id="touch-move"><div class="joystick-knob" id="knob-move"></div></div>
     <div class="touch-zone" id="touch-look"><div class="joystick-knob" id="knob-look"></div></div>
@@ -75,7 +76,7 @@
       <button class="mob-btn" id="m-btn-drop">DROP</button>
       <button class="mob-btn" id="m-btn-crouch">CROUCH</button>
       <button class="mob-btn" id="m-btn-fire">FIRE</button>
-      <!-- FUN MODE TOUCH BUTTONS (STRICTLY HIDDEN UNLESS FUN MODE ENABLED) -->
+      <!-- FUN MODE TOUCH BUTTONS (STRICTLY HIDDEN BY DEFAULT) -->
       <button class="mob-btn fun-btn" id="m-btn-spawn" style="display:none;">SPAWN</button>
       <button class="mob-btn fun-btn" id="m-btn-up" style="display:none;">UP</button>
       <button class="mob-btn fun-btn" id="m-btn-down" style="display:none;">DOWN</button>
