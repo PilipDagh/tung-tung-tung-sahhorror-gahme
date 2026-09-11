@@ -5,12 +5,26 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
   <title>Granny: Tung Tung Sahur Edition</title>
   
-  <link rel="stylesheet" href="style.css" />
+  <!-- Cache-busting query string forces browsers and Vercel to bypass old cached styles -->
+  <link rel="stylesheet" href="style.css?v=12" />
+  
   <!-- Three.js 3D Engine & Global Paho MQTT Networking -->
   <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/paho-mqtt/1.0.1/mqttws31.min.js"></script>
 </head>
 <body>
+  <!-- RUNTIME ERROR DIAGNOSTIC BANNER (PRINTS RED ERROR IF ANY SCRIPT BREAKS) -->
+  <div id="engine-error-box" style="display:none; position:fixed; top:0; left:0; width:100%; background:rgba(180,0,0,0.95); color:#fff; font-family:monospace; font-size:13px; padding:12px; z-index:999999; border-bottom:2px solid #ff0000;"></div>
+  <script>
+    window.onerror = function(msg, url, line, col, err) {
+      var box = document.getElementById('engine-error-box');
+      if (box) {
+        box.style.display = 'block';
+        box.innerHTML = '<b>CRITICAL ERROR:</b> ' + msg + '<br><small>File: ' + url + ' (Line: ' + line + ')</small>';
+      }
+    };
+  </script>
+
   <!-- 3D WEBGL VIEWPORT -->
   <div id="canvas-container"></div>
   <div id="crosshair" class="reticle-dot"></div>
@@ -76,7 +90,7 @@
       <button class="mob-btn" id="m-btn-drop">DROP</button>
       <button class="mob-btn" id="m-btn-crouch">CROUCH</button>
       <button class="mob-btn" id="m-btn-fire">FIRE</button>
-      <!-- FUN MODE TOUCH BUTTONS (STRICTLY HIDDEN BY DEFAULT) -->
+      <!-- FUN MODE TOUCH BUTTONS (STRICTLY HIDDEN UNLESS FUN MODE ACTIVE) -->
       <button class="mob-btn fun-btn" id="m-btn-spawn" style="display:none;">SPAWN</button>
       <button class="mob-btn fun-btn" id="m-btn-up" style="display:none;">UP</button>
       <button class="mob-btn fun-btn" id="m-btn-down" style="display:none;">DOWN</button>
@@ -254,9 +268,7 @@
       <h2 style="color:#00ffaa;">MANOR TERMINAL v2.5 [HOST ONLY]</h2>
       <p style="font-size:12px;color:#aaa;margin-bottom:10px;">Lobby Management & Player Leaderboard</p>
       
-      <div id="laptop-player-table" style="max-height:160px;overflow-y:auto;border:1px solid #333;padding:8px;font-size:12px;margin-bottom:10px;">
-        <!-- Filled dynamically -->
-      </div>
+      <div id="laptop-player-table" style="max-height:160px;overflow-y:auto;border:1px solid #333;padding:8px;font-size:12px;margin-bottom:10px;"></div>
 
       <div class="setting-row">
         <label>Extra Barricade Locks</label>
@@ -411,9 +423,9 @@
     </div>
   </div>
 
-  <!-- LOAD SCRIPT MODULES -->
-  <script src="audio.js"></script>
-  <script src="map.js"></script>
-  <script src="game.js"></script>
+  <!-- LOAD SCRIPT MODULES (CACHE-BUSTED TO PREVENT OLD SCRIPT CACHING) -->
+  <script src="audio.js?v=12"></script>
+  <script src="map.js?v=12"></script>
+  <script src="game.js?v=12"></script>
 </body>
 </html>
