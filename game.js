@@ -6,6 +6,19 @@ const _tempVecA = new THREE.Vector3();
 const _tempRayOrigin = new THREE.Vector3();
 const _tempClampPt = new THREE.Vector3();
 
+// Safe Pointer Lock helper that never crashes on iPad, mobile, or unsupported browsers
+function safeRequestPointerLock(el) {
+  try {
+    if (el && typeof el.requestPointerLock === 'function') {
+      el.requestPointerLock();
+    } else if (document.body && typeof document.body.requestPointerLock === 'function') {
+      document.body.requestPointerLock();
+    }
+  } catch (err) {
+    // Gracefully ignore if touch device / unsupported
+  }
+}
+
 // 1. WAYPOINT GRAPH FOR GRANNY NAVIGATION
 const NavGraph = {
   nodes: {
@@ -249,7 +262,7 @@ const Viewmodel = {
   }
 };
 
-// 4. PLAYER CONTROLLER WITH BRIGHT CAMERA-MOUNTED LIGHTING (NO BLACK SCREENS)
+// 4. PLAYER CONTROLLER WITH LIGHTING & PHYSICS
 const Player = {
   position: new THREE.Vector3(-6.5, 6.0, 8.5),
   velocity: new THREE.Vector3(),
@@ -270,7 +283,8 @@ const Player = {
   isGrounded: false,
 
   init(camera, scene) {
-    this.torchLight = new THREE.PointLight(0xffeedd, 2.5, 30);
+    // Clean, balanced player torch (never computes NaN shader errors)
+    this.torchLight = new THREE.PointLight(0xffeedd, 1.4, 22);
     this.torchLight.position.set(0, 0, 0.2);
     camera.add(this.torchLight);
 
@@ -303,7 +317,7 @@ const Player = {
   },
 
   update(dt, camera) {
-    // A. WAKE-UP BED ANIMATION PROGRESSION (Smooth 2.4s rise and step onto floor)
+    // A. WAKE-UP BED ANIMATION PROGRESSION
     if (this.isIntroPlaying) {
       this.introTimer += dt;
 
@@ -783,7 +797,7 @@ function updatePhysicsAndWorld(dt) {
   }
 }
 
-// 8. GRANNY TUNG TUNG SAHUR AI (CONE VISION & CORRECT THREE.JS RAYCASTING)
+// 8. GRANNY TUNG TUNG SAHUR AI (CONE VISION & PROXIMITY AGGRO)
 const MonsterAI = {
   mesh: null,
   state: 'PATROL',
@@ -896,7 +910,7 @@ const MonsterAI = {
   },
 
   hasLineOfSightToPlayer() {
-    if (Player.isHiding || Player.isIntroPlaying || Player.isGhost) return false;
+    if (Player.isHiding || Player.isIntroPlaying || Player.isGhost || GameState.isDying || !GameState.inGame) return false;
 
     this.losCheckFrame++;
     if (this.losCheckFrame % 4 !== 0) return this.lastCanSeeResult;
@@ -927,7 +941,7 @@ const MonsterAI = {
     _tempRayOrigin.set(this.mesh.position.x, this.mesh.position.y + 1.8, this.mesh.position.z);
     const ray = new THREE.Ray(_tempRayOrigin, _tempVecA);
 
-    // Three.js raycasting: ray.intersectBox(box, target)
+    // Official Three.js raycasting method (never throws box.intersectsRay error)
     const walls = CollisionWorld.wallsAndDoors;
     for (let i = 0; i < walls.length; i++) {
       const box = walls[i];
@@ -944,7 +958,7 @@ const MonsterAI = {
   },
 
   hearNoise(pos, radius) {
-    if (this.state === 'STUNNED') return;
+    if (this.state === 'STUNNED' || GameState.isDying || !GameState.inGame) return;
     const effectiveRadius = radius * this.hearingRadiusMod;
     const dist = this.mesh.position.distanceTo(pos);
 
@@ -964,7 +978,8 @@ const MonsterAI = {
   },
 
   update(dt) {
-    if (!this.mesh || GameState.isGP) return;
+    // Only run Granny AI if actually playing in the manor! (Never runs in Main Menu)
+    if (!this.mesh || GameState.isGP || !GameState.inGame || GameState.isDying) return;
 
     this.animTime += dt;
     if (this.rightArm) {
@@ -1081,13 +1096,13 @@ const Input = {
     });
 
     window.addEventListener('mousedown', (e) => {
-      if (document.pointerLockElement === container && e.button === 0) {
+      if (e.button === 0) {
         Player.fireWeapon(camera);
       }
     });
 
     window.addEventListener('mousemove', (e) => {
-      if (document.pointerLockElement === container && !GameState.isPaused) {
+      if (!GameState.isPaused) {
         Player.rotation.y -= e.movementX * this.mouseSens;
         Player.rotation.x -= e.movementY * this.mouseSens * this.invertY;
         const maxPitch = Player.isHiding ? 0.5 : Math.PI * 0.45;
@@ -1095,14 +1110,22 @@ const Input = {
       }
     });
 
-    document.getElementById('click-to-focus').onclick = () => {
-      container.requestPointerLock();
-    };
+    // Safe Pointer Lock attachment
+    const clickFocus = document.getElementById('click-to-focus');
+    if (clickFocus) {
+      clickFocus.onclick = () => {
+        safeRequestPointerLock(container);
+      };
+    }
+
     document.addEventListener('pointerlockchange', () => {
-      const isLocked = document.pointerLockElement === container;
+      const isLocked = document.pointerLockElement === container || document.pointerLockElement === document.body;
       const inGame = document.getElementById('hud').style.display === 'block';
-      document.getElementById('click-to-focus').style.display =
-        (inGame && !isLocked && !document.getElementById('opt-mobile-mode').checked && !Player.isIntroPlaying && !GameState.isPaused) ? 'flex' : 'none';
+      const focusEl = document.getElementById('click-to-focus');
+      if (focusEl) {
+        focusEl.style.display =
+          (inGame && !isLocked && !document.getElementById('opt-mobile-mode').checked && !Player.isIntroPlaying && !GameState.isPaused) ? 'flex' : 'none';
+      }
     });
 
     for (let i = 0; i < 5; i++) {
@@ -1246,11 +1269,11 @@ function togglePauseMenu() {
     pMenu.style.display = 'none';
     if (GameState.mode === 'sp') GameState.isPaused = false;
     if (!document.getElementById('opt-mobile-mode').checked) {
-      canvasContainer.requestPointerLock();
+      safeRequestPointerLock(canvasContainer);
     }
   } else {
     pMenu.style.display = 'flex';
-    document.exitPointerLock();
+    try { document.exitPointerLock(); } catch(e){}
     if (GameState.mode === 'sp') {
       GameState.isPaused = true;
       document.getElementById('pause-menu-title').innerText = 'PAUSED';
@@ -1275,26 +1298,38 @@ document.getElementById('btn-pause-exit').onclick = () => {
   window.location.reload();
 };
 
-// 11. DAY PROGRESSION, JUMPSCARE & GAME OVER
+// 11. DAY PROGRESSION, JUMPSCARE & GAME OVER (INSTANT RESTART/CASCADE FIXED)
 function triggerJumpscare() {
+  // Prevent multiple calls and 60 FPS death cascades
+  if (GameState.isDying || !GameState.inGame) return;
+  GameState.isDying = true;
+
+  // Immediately stun AI so she doesn't loop-attack
+  MonsterAI.state = 'STUNNED';
   audio.stopChase();
   audio.playBatHit();
   audio.playJumpscare();
+
   const overlay = document.getElementById('jumpscare-overlay');
-  overlay.style.display = 'block';
+  if (overlay) overlay.style.display = 'block';
 
   setTimeout(() => {
-    overlay.style.display = 'none';
+    if (overlay) overlay.style.display = 'none';
     GameState.day++;
     GameState.playerStats.deaths++;
     CareerStats.save();
+
+    // Immediately teleport Granny back to her spawn downstairs
+    MonsterAI.mesh.position.set(0, 0.2, 12.0);
+    MonsterAI.state = 'PATROL';
+    MonsterAI.currentPath = [];
 
     if (GameState.day > GameState.maxDays) {
       showGameOverModal('The 5 days are up. Granny eliminated all survivors.');
     } else {
       respawnPlayer();
     }
-  }, 1400);
+  }, 1600);
 }
 
 function updateDayVignetteAndSpeed() {
@@ -1309,8 +1344,13 @@ function updateDayVignetteAndSpeed() {
 function respawnPlayer() {
   Player.health = 100;
   document.getElementById('health-bar-fill').style.width = '100%';
+  GameState.isDying = false;
+
+  // Reset Granny back downstairs so no spawn camping occurs
   MonsterAI.mesh.position.set(0, 0.2, 12.0);
   MonsterAI.state = 'PATROL';
+  MonsterAI.currentPath = [];
+
   showDaySequence();
 }
 
@@ -1684,7 +1724,7 @@ const SettingsEngine = {
     const gammaEl = document.getElementById('opt-gamma');
     gammaEl.oninput = (e) => {
       const v = parseFloat(e.target.value);
-      ambLight.intensity = 0.95 * v;
+      ambLight.intensity = 0.45 * v;
       document.getElementById('opt-gamma-val').innerText = `${v.toFixed(1)}`;
     };
 
@@ -1698,9 +1738,9 @@ const SettingsEngine = {
     fogEl.onchange = (e) => {
       const v = e.target.value;
       if (v === 'none') scene.fog.near = 999;
-      else if (v === 'light') { scene.fog.near = 35; scene.fog.far = 100; }
-      else if (v === 'normal') { scene.fog.near = 25; scene.fog.far = 90; }
-      else if (v === 'heavy') { scene.fog.near = 10; scene.fog.far = 35; }
+      else if (v === 'light') { scene.fog.near = 25; scene.fog.far = 80; }
+      else if (v === 'normal') { scene.fog.near = 15; scene.fog.far = 65; }
+      else if (v === 'heavy') { scene.fog.near = 6; scene.fog.far = 28; }
     };
 
     const sensEl = document.getElementById('opt-sens');
@@ -1746,7 +1786,7 @@ const SettingsEngine = {
   }
 };
 
-// 17. RUNTIME INITIALIZATION & BULLETPROOF LIGHTING
+// 16. RUNTIME INITIALIZATION & HORROR-BALANCED LIGHTING
 const GameState = {
   mode: 'sp',
   difficulty: 'normal',
@@ -1756,6 +1796,7 @@ const GameState = {
   isGP: false,
   funMode: false,
   isPaused: false,
+  isDying: false,
   restartVotes: 0,
   playerStats: { escapes: 0, deaths: 0, stuns: 0, days: 0 }
 };
@@ -1768,8 +1809,9 @@ const EngineLimiter = {
 
 const canvasContainer = document.getElementById('canvas-container');
 const scene = new THREE.Scene();
-scene.background = new THREE.Color(0x3a3028); // Warm, visible room tone
-scene.fog = new THREE.Fog(0x3a3028, 25, 90);
+scene.background = new THREE.Color(0x1a1614);
+// Linear horror fog (balanced so rooms are never washed out or pitch black)
+scene.fog = new THREE.Fog(0x1a1614, 15, 65);
 
 const camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 90);
 scene.add(camera);
@@ -1779,25 +1821,25 @@ renderer.setSize(window.innerWidth, window.innerHeight);
 renderer.setPixelRatio(Math.min(window.devicePixelRatio, 1.5));
 canvasContainer.appendChild(renderer.domElement);
 
-// Base Ambient Light
-const ambLight = new THREE.AmbientLight(0xffeedd, 0.95);
+// Balanced Ambient Light (45% intensity prevents flat-black void while keeping horror contrast)
+const ambLight = new THREE.AmbientLight(0xffeedd, 0.45);
 scene.add(ambLight);
 
-// Overhead Directional Light
-const sunLight = new THREE.DirectionalLight(0xffeedd, 0.6);
+// Overhead Directional Moon Fill
+const sunLight = new THREE.DirectionalLight(0xffeedd, 0.35);
 sunLight.position.set(0, 20, 0);
 scene.add(sunLight);
 
-// Room Lamps in Manor
-const bedroomLamp = new THREE.PointLight(0xffb055, 2.5, 25);
+// Atmospheric Manor Point Lamps
+const bedroomLamp = new THREE.PointLight(0xffb055, 1.5, 16);
 bedroomLamp.position.set(-8, 9.5, 8);
 scene.add(bedroomLamp);
 
-const foyerLamp = new THREE.PointLight(0xffdd99, 2.5, 25);
+const foyerLamp = new THREE.PointLight(0xffdd99, 1.5, 18);
 foyerLamp.position.set(0, 4.2, 8);
 scene.add(foyerLamp);
 
-const basementLight = new THREE.PointLight(0x77dd99, 2.0, 22);
+const basementLight = new THREE.PointLight(0x66cc88, 1.2, 14);
 basementLight.position.set(-4, -3.5, -4);
 scene.add(basementLight);
 
@@ -1839,10 +1881,11 @@ document.getElementById('settings-back').onclick = () => {
 
 document.getElementById('sp-start').onclick = () => {
   GameState.mode = 'sp';
+  GameState.inGame = true;
+  GameState.isDying = false;
   GameState.difficulty = document.getElementById('sp-diff').value;
   GameState.funMode = document.getElementById('sp-funmode').checked;
 
-  // Enforce Clean Fun Mode Mobile Button Visibility
   if (GameState.funMode) {
     document.body.classList.add('fun-mode-active');
     document.getElementById('m-btn-spawn').style.display = 'flex';
@@ -1895,6 +1938,8 @@ document.getElementById('btn-commit-create-lobby').onclick = () => {
   NetworkEngine.maxPlayers = parseInt(document.getElementById('mp-max-players').value);
 
   GameState.mode = 'mp';
+  GameState.inGame = false;
+  GameState.isDying = false;
   GameState.difficulty = document.getElementById('mp-diff').value;
   MonsterAI.applyDifficultySettings();
 
@@ -1996,7 +2041,7 @@ function renderLobbyCard(data) {
   list.appendChild(div);
 }
 
-// 18. THROTTLED 1-1200 FPS ENGINE LOOP
+// 17. THROTTLED 1-1200 FPS ENGINE LOOP
 setInterval(() => { NetworkEngine.tickSync(); }, 50);
 
 function gameLoop() {
@@ -2005,11 +2050,9 @@ function gameLoop() {
   const now = performance.now();
   const elapsed = now - EngineLimiter.lastFrameTime;
 
-  // FPS Limiter: Throttles to exact targetFPS (1 - 1200 FPS)
   if (elapsed < EngineLimiter.frameInterval) return;
   EngineLimiter.lastFrameTime = now - (elapsed % EngineLimiter.frameInterval);
 
-  // Singleplayer Pause Freezes Delta Time
   const dt = GameState.isPaused ? 0 : Math.min(elapsed / 1000, 0.05);
 
   if (!GameState.isPaused) {
