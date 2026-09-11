@@ -1,6 +1,5 @@
 /* =========================================================================
-   GAME.JS - BULLETPROOF LIGHTING (NO SPOTLIGHT TARGET BUGS), SMART AI,
-   IN-GAME PAUSE MENU, MULTIPLAYER LOBBY HOSTING & ROCK-SOLID 60-120 FPS
+   GAME.JS - COMPLETE CONTROLLER, PAUSE MENU, SAFE LOBBY CREATION & LIGHTING
    ========================================================================= */
 
 const _tempVecA = new THREE.Vector3();
@@ -165,7 +164,7 @@ const Viewmodel = {
   }
 };
 
-// 3. PLAYER CONTROLLER WITH BULLETPROOF CAMERA-MOUNTED LIGHTING
+// 3. PLAYER CONTROLLER WITH BRIGHT CAMERA-MOUNTED LIGHTING (NO BLACK SCREENS)
 const Player = {
   position: new THREE.Vector3(-6.5, 6.0, 8.5), // Defaults safely inside the Starting Bedroom
   velocity: new THREE.Vector3(),
@@ -187,7 +186,7 @@ const Player = {
 
   init(camera, scene) {
     // 1. Omnidirectional Player Torch Light (Cannot produce NaN shader bugs)
-    this.torchLight = new THREE.PointLight(0xffeedd, 2.2, 28);
+    this.torchLight = new THREE.PointLight(0xffeedd, 2.5, 30);
     this.torchLight.position.set(0, 0, 0.2);
     camera.add(this.torchLight);
 
@@ -221,7 +220,7 @@ const Player = {
   },
 
   update(dt, camera) {
-    // A. WAKE-UP BED ANIMATION PROGRESSION (Smooth 2.5s rise and step onto floor)
+    // A. WAKE-UP BED ANIMATION PROGRESSION (Smooth 2.4s rise and step onto floor)
     if (this.isIntroPlaying) {
       this.introTimer += dt;
 
@@ -597,7 +596,7 @@ const Inventory = {
   }
 };
 
-// 5. FUN MODE ZERO-G SIMULATION
+// 5. FUN MODE ZERO-G PHYSICS
 const FunPhysics = {
   balls: [],
 
@@ -638,7 +637,7 @@ const FunPhysics = {
   }
 };
 
-// 6. WORLD PROPS UPDATE
+// 6. WORLD PROPS & INTERPOLATION
 function updatePhysicsAndWorld(dt) {
   for (let i = 0; i < House.doors.length; i++) {
     const door = House.doors[i];
@@ -701,7 +700,7 @@ function updatePhysicsAndWorld(dt) {
   }
 }
 
-// 7. GRANNY TUNG TUNG SAHUR AI (CONE VISION & PROXIMITY AGGRO)
+// 7. GRANNY TUNG TUNG SAHUR AI
 const MonsterAI = {
   mesh: null,
   state: 'PATROL',
@@ -1664,7 +1663,7 @@ const SettingsEngine = {
   }
 };
 
-// 16. RUNTIME INITIALIZATION & BULLETPROOF LIGHTING
+// 16. RUNTIME INITIALIZATION & SCENE LIGHTING
 const GameState = {
   mode: 'sp',
   difficulty: 'normal',
@@ -1761,10 +1760,17 @@ document.getElementById('sp-start').onclick = () => {
   GameState.funMode = document.getElementById('sp-funmode').checked;
 
   // Strict: Fun Mode mobile buttons strictly hidden if Fun Mode is OFF
-  const funDisplay = GameState.funMode ? 'flex' : 'none';
-  document.getElementById('m-btn-spawn').style.display = funDisplay;
-  document.getElementById('m-btn-up').style.display = funDisplay;
-  document.getElementById('m-btn-down').style.display = funDisplay;
+  if (GameState.funMode) {
+    document.body.classList.add('fun-mode-active');
+    document.getElementById('m-btn-spawn').style.display = 'flex';
+    document.getElementById('m-btn-up').style.display = 'flex';
+    document.getElementById('m-btn-down').style.display = 'flex';
+  } else {
+    document.body.classList.remove('fun-mode-active');
+    document.getElementById('m-btn-spawn').style.display = 'none';
+    document.getElementById('m-btn-up').style.display = 'none';
+    document.getElementById('m-btn-down').style.display = 'none';
+  }
 
   MonsterAI.applyDifficultySettings();
   audio.init();
@@ -1810,10 +1816,17 @@ document.getElementById('btn-commit-create-lobby').onclick = () => {
   MonsterAI.applyDifficultySettings();
 
   GameState.funMode = document.getElementById('mp-funmode').checked || (NetworkEngine.roomName.toUpperCase() === 'FUN TIME');
-  const funDisplay = GameState.funMode ? 'flex' : 'none';
-  document.getElementById('m-btn-spawn').style.display = funDisplay;
-  document.getElementById('m-btn-up').style.display = funDisplay;
-  document.getElementById('m-btn-down').style.display = funDisplay;
+  if (GameState.funMode) {
+    document.body.classList.add('fun-mode-active');
+    document.getElementById('m-btn-spawn').style.display = 'flex';
+    document.getElementById('m-btn-up').style.display = 'flex';
+    document.getElementById('m-btn-down').style.display = 'flex';
+  } else {
+    document.body.classList.remove('fun-mode-active');
+    document.getElementById('m-btn-spawn').style.display = 'none';
+    document.getElementById('m-btn-up').style.display = 'none';
+    document.getElementById('m-btn-down').style.display = 'none';
+  }
 
   showScreen('');
 
