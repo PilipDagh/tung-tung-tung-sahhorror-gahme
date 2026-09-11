@@ -249,7 +249,7 @@ const Viewmodel = {
   }
 };
 
-// 4. PLAYER CONTROLLER WITH LIGHTING & PHYSICS
+// 4. PLAYER CONTROLLER WITH BRIGHT CAMERA-MOUNTED LIGHTING (NO BLACK SCREENS)
 const Player = {
   position: new THREE.Vector3(-6.5, 6.0, 8.5),
   velocity: new THREE.Vector3(),
@@ -303,6 +303,7 @@ const Player = {
   },
 
   update(dt, camera) {
+    // A. WAKE-UP BED ANIMATION PROGRESSION (Smooth 2.4s rise and step onto floor)
     if (this.isIntroPlaying) {
       this.introTimer += dt;
 
@@ -333,6 +334,7 @@ const Player = {
       return;
     }
 
+    // B. GHOST SPECTATOR NOCLIP FLIGHT
     if (this.isGhost) {
       const ghostSpd = 7.0;
       const fwd = new THREE.Vector3(0, 0, -1).applyEuler(this.rotation);
@@ -350,6 +352,7 @@ const Player = {
       return;
     }
 
+    // C. UNDER-BED FREE LOOK
     if (this.isHiding) {
       if (this.hidingSpot) {
         camera.position.copy(this.hidingSpot.position);
@@ -358,6 +361,7 @@ const Player = {
       return;
     }
 
+    // D. FIRST-PERSON MOVEMENT & GRAVITY
     const curSpeed = (this.isCrouched ? this.crouchSpeed : this.speed) * this.limpMultiplier;
     const move = new THREE.Vector3();
     if (Input.keys['KeyW']) move.z -= 1;
@@ -779,7 +783,7 @@ function updatePhysicsAndWorld(dt) {
   }
 }
 
-// 8. GRANNY TUNG TUNG SAHUR AI (CONE VISION & PROXIMITY AGGRO)
+// 8. GRANNY TUNG TUNG SAHUR AI (CONE VISION & CORRECT THREE.JS RAYCASTING)
 const MonsterAI = {
   mesh: null,
   state: 'PATROL',
@@ -907,12 +911,14 @@ const MonsterAI = {
     const fwd = new THREE.Vector3(0, 0, 1).applyEuler(this.mesh.rotation);
     _tempVecA.normalize();
 
+    // 75° Vision Cone: if her back is turned, she CANNOT see you!
     const angle = fwd.angleTo(_tempVecA);
     if (angle > this.visionAngle) {
       this.lastCanSeeResult = false;
       return false;
     }
 
+    // Proximity aggro in same room (unless crouching)
     if (dist < 4.5 && !Player.isCrouched) {
       this.lastCanSeeResult = true;
       return true;
@@ -921,11 +927,11 @@ const MonsterAI = {
     _tempRayOrigin.set(this.mesh.position.x, this.mesh.position.y + 1.8, this.mesh.position.z);
     const ray = new THREE.Ray(_tempRayOrigin, _tempVecA);
 
+    // Three.js raycasting: ray.intersectBox(box, target)
     const walls = CollisionWorld.wallsAndDoors;
     for (let i = 0; i < walls.length; i++) {
       const box = walls[i];
-      if (box.intersectsRay(ray)) {
-        box.clampPoint(ray.origin, _tempClampPt);
+      if (ray.intersectBox(box, _tempClampPt) !== null) {
         if (ray.origin.distanceTo(_tempClampPt) < dist - 0.5) {
           this.lastCanSeeResult = false;
           return false;
@@ -1762,7 +1768,7 @@ const EngineLimiter = {
 
 const canvasContainer = document.getElementById('canvas-container');
 const scene = new THREE.Scene();
-scene.background = new THREE.Color(0x3a3028);
+scene.background = new THREE.Color(0x3a3028); // Warm, visible room tone
 scene.fog = new THREE.Fog(0x3a3028, 25, 90);
 
 const camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 90);
@@ -1836,6 +1842,7 @@ document.getElementById('sp-start').onclick = () => {
   GameState.difficulty = document.getElementById('sp-diff').value;
   GameState.funMode = document.getElementById('sp-funmode').checked;
 
+  // Enforce Clean Fun Mode Mobile Button Visibility
   if (GameState.funMode) {
     document.body.classList.add('fun-mode-active');
     document.getElementById('m-btn-spawn').style.display = 'flex';
@@ -1867,6 +1874,7 @@ document.getElementById('btn-cancel-create').onclick = () => {
   document.getElementById('row-mp-back').style.display = 'flex';
 };
 
+// DYNAMIC TOGGLES FOR GP MODE & FUN MODE (ONLY IF MAX PLAYERS >= 5)
 document.getElementById('mp-max-players').oninput = (e) => {
   const v = parseInt(e.target.value);
   document.getElementById('mp-max-players-val').innerText = v;
@@ -1879,6 +1887,7 @@ document.getElementById('mp-max-players').oninput = (e) => {
   }
 };
 
+// HOST AND HOP IN LOBBY BUTTON
 document.getElementById('btn-commit-create-lobby').onclick = () => {
   NetworkEngine.isHost = true;
   NetworkEngine.roomCode = 'SAH-' + Math.floor(10 + Math.random() * 89);
@@ -1996,9 +2005,11 @@ function gameLoop() {
   const now = performance.now();
   const elapsed = now - EngineLimiter.lastFrameTime;
 
+  // FPS Limiter: Throttles to exact targetFPS (1 - 1200 FPS)
   if (elapsed < EngineLimiter.frameInterval) return;
   EngineLimiter.lastFrameTime = now - (elapsed % EngineLimiter.frameInterval);
 
+  // Singleplayer Pause Freezes Delta Time
   const dt = GameState.isPaused ? 0 : Math.min(elapsed / 1000, 0.05);
 
   if (!GameState.isPaused) {
