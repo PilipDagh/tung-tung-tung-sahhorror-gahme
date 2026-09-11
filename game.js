@@ -1,12 +1,97 @@
 /* =========================================================================
-   GAME.JS - COMPLETE CONTROLLER, PAUSE MENU, SAFE LOBBY CREATION & LIGHTING
+   GAME.JS - COMPLETE CONTROLLER, NAVGRAPH, PAUSE MENU, LIGHTING & AI
    ========================================================================= */
 
 const _tempVecA = new THREE.Vector3();
 const _tempRayOrigin = new THREE.Vector3();
 const _tempClampPt = new THREE.Vector3();
 
-// 1. PERSISTENT LOCAL STORAGE & CAREER STATS
+// 1. WAYPOINT GRAPH FOR GRANNY NAVIGATION
+const NavGraph = {
+  nodes: {
+    'bed_start': new THREE.Vector3(-8.5, 6.0, 8.5),
+    'door_start': new THREE.Vector3(-5.5, 6.0, 2.5),
+    'hall_mid': new THREE.Vector3(-2.0, 6.0, 2.5),
+    'hall_east': new THREE.Vector3(4.0, 6.0, 2.5),
+    'stairs_top': new THREE.Vector3(5.0, 6.0, 4.5),
+    'stairs_mid': new THREE.Vector3(5.0, 3.0, 8.5),
+    'stairs_bottom': new THREE.Vector3(5.0, 0.2, 13.5),
+    'foyer': new THREE.Vector3(0.0, 0.2, 12.0),
+    'front_door': new THREE.Vector3(0.0, 0.2, 16.0),
+    'living_room': new THREE.Vector3(-8.0, 0.2, 8.0),
+    'dining_room': new THREE.Vector3(-8.0, 0.2, -2.0),
+    'kitchen': new THREE.Vector3(8.0, 0.2, -6.0),
+    'stairs_down_top': new THREE.Vector3(-5.0, 0.2, -1.5),
+    'stairs_down_mid': new THREE.Vector3(-5.0, -3.0, -6.0),
+    'stairs_down_bot': new THREE.Vector3(-5.0, -5.8, -10.5),
+    'garage_main': new THREE.Vector3(-7.0, -5.8, -6.0),
+    'garage_east': new THREE.Vector3(4.0, -5.8, -6.0)
+  },
+
+  edges: {
+    'bed_start': ['door_start'],
+    'door_start': ['bed_start', 'hall_mid'],
+    'hall_mid': ['door_start', 'hall_east'],
+    'hall_east': ['hall_mid', 'stairs_top'],
+    'stairs_top': ['hall_east', 'stairs_mid'],
+    'stairs_mid': ['stairs_top', 'stairs_bottom'],
+    'stairs_bottom': ['stairs_mid', 'foyer'],
+    'foyer': ['stairs_bottom', 'front_door', 'living_room', 'stairs_down_top'],
+    'front_door': ['foyer'],
+    'living_room': ['foyer', 'dining_room'],
+    'dining_room': ['living_room', 'kitchen'],
+    'kitchen': ['dining_room'],
+    'stairs_down_top': ['foyer', 'stairs_down_mid'],
+    'stairs_down_mid': ['stairs_down_top', 'stairs_down_bot'],
+    'stairs_down_bot': ['stairs_down_mid', 'garage_main'],
+    'garage_main': ['stairs_down_bot', 'garage_east'],
+    'garage_east': ['garage_main']
+  },
+
+  getNearestNode(pos) {
+    let best = null;
+    let minDist = Infinity;
+    for (const [id, nodePos] of Object.entries(this.nodes)) {
+      const d = pos.distanceTo(nodePos);
+      if (d < minDist) {
+        minDist = d;
+        best = id;
+      }
+    }
+    return best;
+  },
+
+  findPath(startPos, endPos) {
+    const startNode = this.getNearestNode(startPos);
+    const endNode = this.getNearestNode(endPos);
+
+    if (startNode === endNode) {
+      return [endPos.clone()];
+    }
+
+    const queue = [[startNode]];
+    const visited = new Set([startNode]);
+
+    while (queue.length > 0) {
+      const path = queue.shift();
+      const curr = path[path.length - 1];
+
+      if (curr === endNode) {
+        return path.map(id => this.nodes[id].clone()).concat([endPos.clone()]);
+      }
+
+      for (const neighbor of (this.edges[curr] || [])) {
+        if (!visited.has(neighbor)) {
+          visited.add(neighbor);
+          queue.push([...path, neighbor]);
+        }
+      }
+    }
+    return [endPos.clone()];
+  }
+};
+
+// 2. PERSISTENT LOCAL STORAGE & CAREER STATS
 const CareerStats = {
   load() {
     const savedName = localStorage.getItem('granny_username');
@@ -42,7 +127,7 @@ const CareerStats = {
   }
 };
 
-// 2. FIRST-PERSON VIEWMODEL RIG
+// 3. FIRST-PERSON VIEWMODEL RIG
 const Viewmodel = {
   group: new THREE.Group(),
   models: {},
@@ -164,9 +249,9 @@ const Viewmodel = {
   }
 };
 
-// 3. PLAYER CONTROLLER WITH BRIGHT CAMERA-MOUNTED LIGHTING (NO BLACK SCREENS)
+// 4. PLAYER CONTROLLER WITH LIGHTING & PHYSICS
 const Player = {
-  position: new THREE.Vector3(-6.5, 6.0, 8.5), // Defaults safely inside the Starting Bedroom
+  position: new THREE.Vector3(-6.5, 6.0, 8.5),
   velocity: new THREE.Vector3(),
   rotation: new THREE.Euler(0, -Math.PI * 0.5, 0, 'YXZ'),
   radius: 0.35,
@@ -185,7 +270,6 @@ const Player = {
   isGrounded: false,
 
   init(camera, scene) {
-    // 1. Omnidirectional Player Torch Light (Cannot produce NaN shader bugs)
     this.torchLight = new THREE.PointLight(0xffeedd, 2.5, 30);
     this.torchLight.position.set(0, 0, 0.2);
     camera.add(this.torchLight);
@@ -198,7 +282,7 @@ const Player = {
     this.introTimer = 0;
     this.isHiding = false;
     this.position.set(-8.8, 6.0, 9.5);
-    this.rotation.set(0.2, -Math.PI * 0.5, 0); // Looking forward-up across bedroom
+    this.rotation.set(0.2, -Math.PI * 0.5, 0);
 
     if (camera) {
       camera.position.set(-8.8, 7.45, 9.5);
@@ -211,7 +295,6 @@ const Player = {
     this.introTimer = 0;
     this.isHiding = false;
 
-    // Guaranteed cleanup of black overlays
     const eyelid = document.getElementById('eyelid-overlay');
     if (eyelid) {
       eyelid.style.display = 'none';
@@ -220,7 +303,6 @@ const Player = {
   },
 
   update(dt, camera) {
-    // A. WAKE-UP BED ANIMATION PROGRESSION (Smooth 2.4s rise and step onto floor)
     if (this.isIntroPlaying) {
       this.introTimer += dt;
 
@@ -251,7 +333,6 @@ const Player = {
       return;
     }
 
-    // B. GHOST SPECTATOR NOCLIP FLIGHT
     if (this.isGhost) {
       const ghostSpd = 7.0;
       const fwd = new THREE.Vector3(0, 0, -1).applyEuler(this.rotation);
@@ -269,7 +350,6 @@ const Player = {
       return;
     }
 
-    // C. UNDER-BED FREE LOOK
     if (this.isHiding) {
       if (this.hidingSpot) {
         camera.position.copy(this.hidingSpot.position);
@@ -278,7 +358,6 @@ const Player = {
       return;
     }
 
-    // D. FIRST-PERSON MOVEMENT & GRAVITY
     const curSpeed = (this.isCrouched ? this.crouchSpeed : this.speed) * this.limpMultiplier;
     const move = new THREE.Vector3();
     if (Input.keys['KeyW']) move.z -= 1;
@@ -525,7 +604,7 @@ const Player = {
   }
 };
 
-// 4. INVENTORY SYSTEM (SILENT PICKUP & DROP)
+// 5. INVENTORY SYSTEM (SILENT PICKUP & DROP)
 const Inventory = {
   items: [null, null, null, null, null],
 
@@ -596,7 +675,7 @@ const Inventory = {
   }
 };
 
-// 5. FUN MODE ZERO-G PHYSICS
+// 6. FUN MODE ZERO-G PHYSICS
 const FunPhysics = {
   balls: [],
 
@@ -637,7 +716,7 @@ const FunPhysics = {
   }
 };
 
-// 6. WORLD PROPS & INTERPOLATION
+// 7. WORLD PROPS & INTERPOLATION
 function updatePhysicsAndWorld(dt) {
   for (let i = 0; i < House.doors.length; i++) {
     const door = House.doors[i];
@@ -700,7 +779,7 @@ function updatePhysicsAndWorld(dt) {
   }
 }
 
-// 7. GRANNY TUNG TUNG SAHUR AI
+// 8. GRANNY TUNG TUNG SAHUR AI (CONE VISION & PROXIMITY AGGRO)
 const MonsterAI = {
   mesh: null,
   state: 'PATROL',
@@ -828,14 +907,12 @@ const MonsterAI = {
     const fwd = new THREE.Vector3(0, 0, 1).applyEuler(this.mesh.rotation);
     _tempVecA.normalize();
 
-    // 75° Vision Cone: if her back is turned, she CANNOT see you!
     const angle = fwd.angleTo(_tempVecA);
     if (angle > this.visionAngle) {
       this.lastCanSeeResult = false;
       return false;
     }
 
-    // Proximity aggro in same room (unless crouching)
     if (dist < 4.5 && !Player.isCrouched) {
       this.lastCanSeeResult = true;
       return true;
@@ -968,7 +1045,7 @@ const MonsterAI = {
   }
 };
 
-// 8. INPUT & CONTROLLER WITH PAUSE MENU [M] KEY
+// 9. INPUT & CONTROLLER WITH PAUSE MENU [M] KEY
 const Input = {
   keys: {},
   mouseSens: 0.0022,
@@ -1154,7 +1231,7 @@ function showPrompt(text) {
   p._t = setTimeout(() => { p.style.display = 'none'; }, 2400);
 }
 
-// 9. PAUSE & IN-GAME ACTION MENU ([M] OR MOBILE [MENU])
+// 10. PAUSE & IN-GAME ACTION MENU ([M] OR MOBILE [MENU])
 function togglePauseMenu() {
   const pMenu = document.getElementById('pause-menu-modal');
   const isOpen = pMenu.style.display === 'flex';
@@ -1192,7 +1269,7 @@ document.getElementById('btn-pause-exit').onclick = () => {
   window.location.reload();
 };
 
-// 10. DAY PROGRESSION, JUMPSCARE & GAME OVER
+// 11. DAY PROGRESSION, JUMPSCARE & GAME OVER
 function triggerJumpscare() {
   audio.stopChase();
   audio.playBatHit();
@@ -1296,7 +1373,7 @@ document.getElementById('btn-leave-lobby').onclick = () => {
   window.location.reload();
 };
 
-// 11. HOST LAPTOP TERMINAL
+// 12. HOST LAPTOP TERMINAL
 function openHostLaptopTerminal() {
   const modal = document.getElementById('laptop-modal');
   modal.style.display = 'flex';
@@ -1312,7 +1389,7 @@ document.getElementById('btn-close-laptop').onclick = () => {
   document.getElementById('laptop-modal').style.display = 'none';
 };
 
-// 12. 3D LOBBY START COUNTDOWN
+// 13. 3D LOBBY START COUNTDOWN
 let lobbyCountdownTimer = null;
 let lobbyCountdownVal = 10;
 
@@ -1350,7 +1427,7 @@ function cancelLobbyCountdown() {
   }
 }
 
-// 13. MULTIPLAYER NETWORKING
+// 14. MULTIPLAYER NETWORKING
 const NetworkEngine = {
   client: null,
   isHost: false,
@@ -1526,7 +1603,7 @@ function spawnDeadCorpseMesh(scene, pos) {
   scene.add(corpse);
 }
 
-// 14. GAME LAUNCH & GP SELECTION
+// 15. GAME LAUNCH & GP SELECTION
 function launchManorGame() {
   GameState.inGame = true;
   document.getElementById('main-menu').style.display = 'none';
@@ -1573,7 +1650,7 @@ function setupAsGrannyPlayer() {
   }, 1000);
 }
 
-// 15. SETTINGS CONTROLLER (LIVE FPS & UI SCALE SLIDERS)
+// 16. SETTINGS CONTROLLER (LIVE FPS & UI SCALE SLIDERS)
 const SettingsEngine = {
   init(renderer, camera, scene) {
     const fpsSlider = document.getElementById('opt-fps-slider');
@@ -1663,7 +1740,7 @@ const SettingsEngine = {
   }
 };
 
-// 16. RUNTIME INITIALIZATION & SCENE LIGHTING
+// 17. RUNTIME INITIALIZATION & BULLETPROOF LIGHTING
 const GameState = {
   mode: 'sp',
   difficulty: 'normal',
@@ -1685,7 +1762,7 @@ const EngineLimiter = {
 
 const canvasContainer = document.getElementById('canvas-container');
 const scene = new THREE.Scene();
-scene.background = new THREE.Color(0x3a3028); // Warm, visible room tone (NOT black/gray void)
+scene.background = new THREE.Color(0x3a3028);
 scene.fog = new THREE.Fog(0x3a3028, 25, 90);
 
 const camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 90);
@@ -1696,7 +1773,7 @@ renderer.setSize(window.innerWidth, window.innerHeight);
 renderer.setPixelRatio(Math.min(window.devicePixelRatio, 1.5));
 canvasContainer.appendChild(renderer.domElement);
 
-// Base Ambient Light (Brightened to guarantee room visibility)
+// Base Ambient Light
 const ambLight = new THREE.AmbientLight(0xffeedd, 0.95);
 scene.add(ambLight);
 
@@ -1759,7 +1836,6 @@ document.getElementById('sp-start').onclick = () => {
   GameState.difficulty = document.getElementById('sp-diff').value;
   GameState.funMode = document.getElementById('sp-funmode').checked;
 
-  // Strict: Fun Mode mobile buttons strictly hidden if Fun Mode is OFF
   if (GameState.funMode) {
     document.body.classList.add('fun-mode-active');
     document.getElementById('m-btn-spawn').style.display = 'flex';
@@ -1778,7 +1854,7 @@ document.getElementById('sp-start').onclick = () => {
   showDaySequence();
 };
 
-// MULTIPLAYER "+ CREATE" TOGGLE HANDLERS (FIXED)
+// MULTIPLAYER "+ CREATE" TOGGLE HANDLERS
 document.getElementById('btn-show-create-lobby').onclick = () => {
   document.getElementById('mp-lobby-browser').style.display = 'none';
   document.getElementById('mp-create-box').style.display = 'block';
@@ -1791,7 +1867,6 @@ document.getElementById('btn-cancel-create').onclick = () => {
   document.getElementById('row-mp-back').style.display = 'flex';
 };
 
-// DYNAMIC TOGGLES FOR GP MODE & FUN MODE (ONLY IF MAX PLAYERS >= 5)
 document.getElementById('mp-max-players').oninput = (e) => {
   const v = parseInt(e.target.value);
   document.getElementById('mp-max-players-val').innerText = v;
@@ -1804,7 +1879,6 @@ document.getElementById('mp-max-players').oninput = (e) => {
   }
 };
 
-// HOST AND HOP IN LOBBY BUTTON (FIXED SAFE SPAWN)
 document.getElementById('btn-commit-create-lobby').onclick = () => {
   NetworkEngine.isHost = true;
   NetworkEngine.roomCode = 'SAH-' + Math.floor(10 + Math.random() * 89);
@@ -1837,7 +1911,6 @@ document.getElementById('btn-commit-create-lobby').onclick = () => {
     }
   } catch (err) {}
 
-  // Spawn Host into 3D Lobby Room
   Player.position.set(60.0, 30.0, 2.0);
   document.getElementById('hud').style.display = 'block';
   showPrompt('Spawned in 3D Lobby! Press [Enter] to start, or [E] on laptop for settings.');
@@ -1914,7 +1987,7 @@ function renderLobbyCard(data) {
   list.appendChild(div);
 }
 
-// 17. THROTTLED 1-1200 FPS ENGINE LOOP
+// 18. THROTTLED 1-1200 FPS ENGINE LOOP
 setInterval(() => { NetworkEngine.tickSync(); }, 50);
 
 function gameLoop() {
@@ -1923,11 +1996,9 @@ function gameLoop() {
   const now = performance.now();
   const elapsed = now - EngineLimiter.lastFrameTime;
 
-  // FPS Limiter: Throttles to exact targetFPS (1 - 1200 FPS)
   if (elapsed < EngineLimiter.frameInterval) return;
   EngineLimiter.lastFrameTime = now - (elapsed % EngineLimiter.frameInterval);
 
-  // Singleplayer Pause Freezes Delta Time
   const dt = GameState.isPaused ? 0 : Math.min(elapsed / 1000, 0.05);
 
   if (!GameState.isPaused) {
