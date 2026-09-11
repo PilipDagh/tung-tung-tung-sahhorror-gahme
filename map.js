@@ -32,6 +32,7 @@ const Assets = {
         ctx.bezierCurveTo(160, y + (Math.random() - 0.5) * 25, 340, y + (Math.random() - 0.5) * 25, 512, y);
         ctx.stroke();
       }
+      // Plank Separator Grooves
       for (let x = 0; x < 512; x += 128) {
         ctx.fillStyle = '#3a2414'; ctx.fillRect(x, 0, 4, 512);
       }
@@ -49,6 +50,7 @@ const Assets = {
           ctx.beginPath(); ctx.arc(x + 24, y + 24, 7, 0, Math.PI * 2); ctx.fill();
         }
       }
+      // Stains & Grime
       for (let i = 0; i < 600; i++) {
         ctx.fillStyle = `rgba(40, 36, 25, ${Math.random() * 0.22})`;
         ctx.fillRect(Math.random() * 512, Math.random() * 512, 4, 4);
@@ -65,6 +67,7 @@ const Assets = {
       ctx.fillStyle = '#ffffff'; ctx.font = 'bold 22px monospace'; ctx.textAlign = 'center';
       ctx.fillText('TUNG TUNG TUNG', 128, 52);
       ctx.fillText('SAHUR!', 128, 84);
+      // Drum silhouette
       ctx.fillStyle = '#4a2815'; ctx.fillRect(68, 115, 120, 130);
       ctx.fillStyle = '#ff3333'; ctx.font = 'bold 16px monospace';
       ctx.fillText('WAKE UP!', 128, 280);
