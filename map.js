@@ -1,12 +1,38 @@
 /* =========================================================================
-   MAP.JS - 1:1 BLUEPRINT MANOR, 3D LOBBY, REAL 3D DRAWERS, KNOCK-DOWN
-   PAINTINGS, SEAMLESS ZERO-GAP FLOORS & 7 RANDOM ITEM SPAWN PRESETS
+   MAP.JS - COMPLETE 5-TIER MANOR (LEVELS -2 TO 2), SECRET WALL PASSAGES,
+   5 ITEM PRESETS, 3D LOBBY, KNOCKABLE PROPS & GITHUB PAINTING LOADER
    ========================================================================= */
 
 // Global scene pointer for builder helpers
 let activeScene = null;
 
-// Top-level solid box and collider generator (accessible by all room builders)
+// Collision World Registry
+const CollisionWorld = {
+  boxes: [],
+  wallsAndDoors: [],
+
+  addBox(minX, minY, minZ, maxX, maxY, maxZ, isWall = false) {
+    const box = new THREE.Box3(
+      new THREE.Vector3(Math.min(minX, maxX), Math.min(minY, maxY), Math.min(minZ, maxZ)),
+      new THREE.Vector3(Math.max(minX, maxX), Math.max(minY, maxY), Math.max(minZ, maxZ))
+    );
+    this.boxes.push(box);
+    if (isWall) {
+      this.wallsAndDoors.push(box);
+    }
+    return box;
+  },
+
+  removeBox(box) {
+    const idx = this.boxes.indexOf(box);
+    if (idx !== -1) this.boxes.splice(idx, 1);
+    const wIdx = this.wallsAndDoors.indexOf(box);
+    if (wIdx !== -1) this.wallsAndDoors.splice(wIdx, 1);
+  }
+};
+window.CollisionWorld = CollisionWorld;
+
+// Top-level solid box generator (accessible globally across all methods)
 function makeSolidBox(w, h, d, x, y, z, mat, isWall = false) {
   const mesh = new THREE.Mesh(new THREE.BoxGeometry(w, h, d), mat);
   mesh.position.set(x, y, z);
@@ -15,6 +41,24 @@ function makeSolidBox(w, h, d, x, y, z, mat, isWall = false) {
   CollisionWorld.addBox(x - w / 2, y - h / 2, z - d / 2, x + w / 2, y + h / 2, z + d / 2, isWall);
   return mesh;
 }
+window.makeSolidBox = makeSolidBox;
+globalThis.makeSolidBox = makeSolidBox;
+
+// --- TIER ELEVATION DATUM ---
+const LEVEL_ELEVATIONS = {
+  LEVEL_MINUS_2: -12.0, // Sub-Basement (Garage, Sewers, Spider Cellar)
+  LEVEL_MINUS_1: -6.0,  // Main Basement (Hall, Wall Safe, Sauna, Secret Tunnel)
+  LEVEL_0: 0.0,         // Ground Floor (Foyer, Kitchen, Dining, Study, Backyard)
+  LEVEL_1: 5.0,         // Second Floor (Bedrooms 1-3, Bath, Crow/Meat Room)
+  LEVEL_2: 10.0,        // Third Floor / Attic (Jail, Special Room, Nursery, Rafters)
+  LOBBY: 30.0           // Isolated 3D Waiting Room
+};
+
+const GITHUB_PAINTING_CONFIG = {
+  BASE_URL: 'https://raw.githubusercontent.com/PilipDagh/tung-tung-tung-sahhorror-gahme/main/assets/paintings/',
+  COUNT: 15,
+  TIMEOUT: 3500
+};
 
 const Assets = {
   woodMat: null,
@@ -31,7 +75,6 @@ const Assets = {
   screenMat: null,
 
   init() {
-    // 1. Weathered Amber-Brown Oak Plank Texture (Brightened 2.5x)
     const makeWoodTexture = () => {
       const c = document.createElement('canvas'); c.width = 512; c.height = 512;
       const ctx = c.getContext('2d');
@@ -51,7 +94,6 @@ const Assets = {
       return new THREE.CanvasTexture(c);
     };
 
-    // 2. Decayed Victorian Floral Wallpaper Texture (Aged Tan/Olive)
     const makeWallpaperTexture = () => {
       const c = document.createElement('canvas'); c.width = 512; c.height = 512;
       const ctx = c.getContext('2d');
@@ -69,7 +111,6 @@ const Assets = {
       return new THREE.CanvasTexture(c);
     };
 
-    // 3. "Tung Tung Tung Sahur" Poster Texture for Lobby
     const makePosterTexture = () => {
       const c = document.createElement('canvas'); c.width = 256; c.height = 320;
       const ctx = c.getContext('2d');
@@ -99,30 +140,6 @@ const Assets = {
   }
 };
 Assets.init();
-
-const CollisionWorld = {
-  boxes: [],
-  wallsAndDoors: [],
-
-  addBox(minX, minY, minZ, maxX, maxY, maxZ, isWall = false) {
-    const box = new THREE.Box3(
-      new THREE.Vector3(Math.min(minX, maxX), Math.min(minY, maxY), Math.min(minZ, maxZ)),
-      new THREE.Vector3(Math.max(minX, maxX), Math.max(minY, maxY), Math.max(minZ, maxZ))
-    );
-    this.boxes.push(box);
-    if (isWall) {
-      this.wallsAndDoors.push(box);
-    }
-    return box;
-  },
-
-  removeBox(box) {
-    const idx = this.boxes.indexOf(box);
-    if (idx !== -1) this.boxes.splice(idx, 1);
-    const wIdx = this.wallsAndDoors.indexOf(box);
-    if (wIdx !== -1) this.wallsAndDoors.splice(wIdx, 1);
-  }
-};
 
 class DynamicPaintingLoader {
   constructor() {
@@ -207,6 +224,8 @@ const House = {
     carGas: false,
     carKey: false
   },
+
+  makeSolidBox: makeSolidBox,
 
   build(scene) {
     activeScene = scene;
@@ -512,7 +531,6 @@ const House = {
     guillotine.position.set(-7.0, y0 + 1.6, 22.0); scene.add(guillotine);
   },
 
-  // 7 DISTINCT ITEM SPAWN PRESETS
   applyRandomItemPreset(scene) {
     const presets = [
       // Preset 0: Standard Route
@@ -778,7 +796,6 @@ const House = {
       const dD = dresserD - 0.2;
       const dY = y + 0.35 + i * (dH + 0.18);
 
-      // Hollow Tray Construction
       const btm = new THREE.Mesh(new THREE.BoxGeometry(dW, 0.04, dD), Assets.frameMat);
       btm.position.set(0, 0.02, -dD / 2);
       drawerGroup.add(btm);
@@ -1010,3 +1027,4 @@ const House = {
     return record;
   }
 };
+window.House = House;
