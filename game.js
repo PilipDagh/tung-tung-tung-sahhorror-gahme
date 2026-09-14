@@ -1,2115 +1,560 @@
-/* =========================================================================
-   GAME.JS - 5-TIER COMPLETE CONTROLLER, 22-ITEM ESCAPE CHAINS,
-   NAVMESH AI, GP MODE, GHOST FLIGHT, 3D LOBBY & 1-1200 FPS ENGINE LOOP
-   ========================================================================= */
+/**
+ * ============================================================================
+ * TUNG TUNG TUNG SAHUR - RE-ENGINEERED ENEMY AI & NAV-GRAPH ENGINE
+ * File: game.js (MonsterAI Subsystem)
+ * ============================================================================
+ */
 
-const _tempVecA = new THREE.Vector3();
-const _tempRayOrigin = new THREE.Vector3();
-const _tempClampPt = new THREE.Vector3();
-
-// Safe Pointer Lock helper that avoids crashes on mobile/iPad/WebKit
-function safeRequestPointerLock(el) {
-  try {
-    if (el && typeof el.requestPointerLock === 'function') {
-      el.requestPointerLock();
-    } else if (document.body && typeof document.body.requestPointerLock === 'function') {
-      document.body.requestPointerLock();
-    }
-  } catch (err) {}
-}
-
-// 1. 5-TIER WAYPOINT GRAPH (LEVELS -2 TO 2) FOR TUNG TUNG SAHUR AI
-const NavGraph = {
-  nodes: {
-    // Level -2: Sub-Basement (Garage, Sewers, Spider Cellar)
-    'l_m2_garage': new THREE.Vector3(-11.0, -11.5, -4.0),
-    'l_m2_ramp_bot': new THREE.Vector3(-2.0, -11.5, -4.0),
-    'l_m2_spider': new THREE.Vector3(10.0, -11.5, -4.0),
-    'l_m2_sewer': new THREE.Vector3(0.0, -11.5, 12.0),
-    'l_m2_sewer_cell': new THREE.Vector3(8.0, -11.5, 14.0),
-
-    // Level -1: Main Basement
-    'l_m1_ramp_top': new THREE.Vector3(-2.0, -5.5, -4.0),
-    'l_m1_hall': new THREE.Vector3(0.0, -5.5, 0.0),
-    'l_m1_sauna': new THREE.Vector3(-10.0, -5.5, 8.0),
-    'l_m1_safe': new THREE.Vector3(10.0, -5.5, 2.0),
-    'l_m1_stairs_bot': new THREE.Vector3(-4.5, -5.5, -8.5),
-
-    // Level 0: Ground Floor & Backyard
-    'l0_stairs_down_top': new THREE.Vector3(-4.5, 0.5, -0.5),
-    'l0_foyer': new THREE.Vector3(0.0, 0.5, 6.0),
-    'l0_front_door': new THREE.Vector3(0.0, 0.5, 16.0),
-    'l0_kitchen': new THREE.Vector3(-8.0, 0.5, 4.0),
-    'l0_dining': new THREE.Vector3(-8.0, 0.5, -2.0),
-    'l0_study': new THREE.Vector3(8.0, 0.5, 0.0),
-    'l0_backyard': new THREE.Vector3(0.0, 0.5, 22.0),
-    'l0_grand_stairs_bot': new THREE.Vector3(5.0, 0.5, 13.5),
-
-    // Level 1: Second Floor
-    'l1_grand_stairs_top': new THREE.Vector3(5.0, 5.8, 3.5),
-    'l1_hall_landing': new THREE.Vector3(0.0, 5.8, 3.5),
-    'l1_bed1': new THREE.Vector3(-7.0, 5.8, 6.0),
-    'l1_bath': new THREE.Vector3(8.0, 5.8, 6.0),
-    'l1_bed2': new THREE.Vector3(-6.0, 5.8, -4.0),
-    'l1_crow': new THREE.Vector3(-8.0, 5.8, -12.0),
-    'l1_attic_stairs_bot': new THREE.Vector3(5.0, 5.8, -6.0),
-
-    // Level 2: Third Floor / Attic
-    'l2_attic_stairs_top': new THREE.Vector3(5.0, 11.2, -12.0),
-    'l2_attic_landing': new THREE.Vector3(0.0, 11.2, 0.0),
-    'l2_jail': new THREE.Vector3(8.0, 11.2, 4.0),
-    'l2_special': new THREE.Vector3(-7.0, 11.2, 4.0),
-    'l2_nursery': new THREE.Vector3(-6.0, 11.2, -6.0)
-  },
-
-  edges: {
-    // Level -2 Connections
-    'l_m2_garage': ['l_m2_ramp_bot'],
-    'l_m2_ramp_bot': ['l_m2_garage', 'l_m2_spider', 'l_m2_sewer', 'l_m1_ramp_top'],
-    'l_m2_spider': ['l_m2_ramp_bot', 'l_m2_sewer'],
-    'l_m2_sewer': ['l_m2_ramp_bot', 'l_m2_spider', 'l_m2_sewer_cell'],
-    'l_m2_sewer_cell': ['l_m2_sewer'],
-
-    // Level -1 Connections
-    'l_m1_ramp_top': ['l_m2_ramp_bot', 'l_m1_hall'],
-    'l_m1_hall': ['l_m1_ramp_top', 'l_m1_sauna', 'l_m1_safe', 'l_m1_stairs_bot'],
-    'l_m1_sauna': ['l_m1_hall'],
-    'l_m1_safe': ['l_m1_hall'],
-    'l_m1_stairs_bot': ['l_m1_hall', 'l0_stairs_down_top'],
-
-    // Level 0 Connections
-    'l0_stairs_down_top': ['l_m1_stairs_bot', 'l0_foyer', 'l0_kitchen'],
-    'l0_foyer': ['l0_stairs_down_top', 'l0_front_door', 'l0_dining', 'l0_study', 'l0_grand_stairs_bot'],
-    'l0_front_door': ['l0_foyer'],
-    'l0_kitchen': ['l0_stairs_down_top', 'l0_dining'],
-    'l0_dining': ['l0_kitchen', 'l0_foyer', 'l0_backyard'],
-    'l0_study': ['l0_foyer'],
-    'l0_backyard': ['l0_dining'],
-    'l0_grand_stairs_bot': ['l0_foyer', 'l1_grand_stairs_top'],
-
-    // Level 1 Connections
-    'l1_grand_stairs_top': ['l0_grand_stairs_bot', 'l1_hall_landing'],
-    'l1_hall_landing': ['l1_grand_stairs_top', 'l1_bed1', 'l1_bath', 'l1_bed2', 'l1_attic_stairs_bot'],
-    'l1_bed1': ['l1_hall_landing'],
-    'l1_bath': ['l1_hall_landing'],
-    'l1_bed2': ['l1_hall_landing', 'l1_crow'],
-    'l1_crow': ['l1_bed2'],
-    'l1_attic_stairs_bot': ['l1_hall_landing', 'l2_attic_stairs_top'],
-
-    // Level 2 Connections
-    'l2_attic_stairs_top': ['l1_attic_stairs_bot', 'l2_attic_landing'],
-    'l2_attic_landing': ['l2_attic_stairs_top', 'l2_jail', 'l2_special', 'l2_nursery'],
-    'l2_jail': ['l2_attic_landing'],
-    'l2_special': ['l2_attic_landing'],
-    'l2_nursery': ['l2_attic_landing']
-  },
-
-  getNearestNode(pos) {
-    let best = 'l_m1_hall';
-    let minDist = Infinity;
-    for (const [id, nodePos] of Object.entries(this.nodes)) {
-      const d = pos.distanceTo(nodePos);
-      if (d < minDist) {
-        minDist = d;
-        best = id;
-      }
-    }
-    return best;
-  },
-
-  findPath(startPos, endPos) {
-    const startNode = this.getNearestNode(startPos);
-    const endNode = this.getNearestNode(endPos);
-
-    if (startNode === endNode) {
-      return [endPos.clone()];
+// ============================================================================
+// 1. 3D WAYPOINT NAVGRAPH ENGINE
+// ============================================================================
+export class NavGraph {
+    constructor() {
+        this.nodes = new Map(); // id -> { id, pos: THREE.Vector3, floor: number, edges: [] }
     }
 
-    const queue = [[startNode]];
-    const visited = new Set([startNode]);
+    addNode(id, x, y, z, floor) {
+        this.nodes.set(id, {
+            id,
+            pos: new THREE.Vector3(x, y, z),
+            floor,
+            edges: []
+        });
+    }
 
-    while (queue.length > 0) {
-      const path = queue.shift();
-      const curr = path[path.length - 1];
+    connect(idA, idB, bidirectional = true) {
+        const nodeA = this.nodes.get(idA);
+        const nodeB = this.nodes.get(idB);
+        if (!nodeA || !nodeB) return;
 
-      if (curr === endNode) {
-        return path.map(id => this.nodes[id].clone()).concat([endPos.clone()]);
-      }
+        const dist = nodeA.pos.distanceTo(nodeB.pos);
+        // Vertical stair penalty prevents AI from attempting diagonal stair phasing
+        const verticalDiff = Math.abs(nodeA.pos.y - nodeB.pos.y);
+        const weight = dist + (verticalDiff > 0.5 ? verticalDiff * 2.5 : 0);
 
-      for (const neighbor of (this.edges[curr] || [])) {
-        if (!visited.has(neighbor)) {
-          visited.add(neighbor);
-          queue.push([...path, neighbor]);
+        nodeA.edges.push({ to: idB, weight });
+        if (bidirectional) {
+            nodeB.edges.push({ to: idA, weight });
         }
-      }
-    }
-    return [endPos.clone()];
-  }
-};
-
-// 2. PERSISTENT LOCAL STORAGE & CAREER METRICS
-const CareerStats = {
-  load() {
-    const savedName = localStorage.getItem('granny_username');
-    if (savedName) {
-      document.getElementById('prof-name').value = savedName;
-    } else {
-      const randGuest = 'Survivor_' + Math.floor(100 + Math.random() * 899);
-      document.getElementById('prof-name').value = randGuest;
-      localStorage.setItem('granny_username', randGuest);
     }
 
-    const s = localStorage.getItem('granny_v5_stats');
-    if (s) {
-      try { Object.assign(GameState.playerStats, JSON.parse(s)); } catch(e){}
-    }
-    this.updateUI();
-
-    document.getElementById('prof-name').onchange = (e) => {
-      localStorage.setItem('granny_username', e.target.value.trim() || 'Survivor');
-    };
-  },
-
-  save() {
-    localStorage.setItem('granny_v5_stats', JSON.stringify(GameState.playerStats));
-    this.updateUI();
-  },
-
-  updateUI() {
-    document.getElementById('stat-escapes').innerText = GameState.playerStats.escapes;
-    document.getElementById('stat-deaths').innerText = GameState.playerStats.deaths;
-    document.getElementById('stat-stuns').innerText = GameState.playerStats.stuns;
-    document.getElementById('stat-days').innerText = GameState.playerStats.days;
-  }
-};
-
-// 3. FIRST-PERSON VIEWMODEL RIG
-const Viewmodel = {
-  group: new THREE.Group(),
-  models: {},
-  activeKey: null,
-  loadedDart: null,
-  gpBat: null,
-  isSwinging: false,
-  swingTime: 0,
-
-  init(camera) {
-    camera.add(this.group);
-    this.group.position.set(0.32, -0.28, -0.55);
-
-    // Crossbow Viewmodel
-    const bow = new THREE.Group();
-    const stock = new THREE.Mesh(new THREE.BoxGeometry(0.08, 0.1, 0.65), Assets.woodMat);
-    bow.add(stock);
-    const prod = new THREE.Mesh(new THREE.BoxGeometry(0.72, 0.04, 0.05), Assets.metalMat);
-    prod.position.set(0, 0.03, -0.25);
-    bow.add(prod);
-
-    this.loadedDart = new THREE.Mesh(new THREE.CylinderGeometry(0.012, 0.012, 0.42, 6), new THREE.MeshBasicMaterial({ color: 0x00ffcc }));
-    this.loadedDart.rotation.x = Math.PI * 0.5;
-    this.loadedDart.position.set(0, 0.06, -0.15);
-    bow.add(this.loadedDart);
-    this.models['Tranquilizer Crossbow'] = bow;
-
-    // Shotgun Viewmodel
-    const sg = new THREE.Group();
-    const barrels = new THREE.Mesh(new THREE.CylinderGeometry(0.035, 0.035, 0.72, 8), Assets.metalMat);
-    barrels.rotation.x = Math.PI * 0.5;
-    barrels.position.set(0, 0.05, -0.25);
-    sg.add(barrels);
-    const sgStock = new THREE.Mesh(new THREE.BoxGeometry(0.07, 0.12, 0.4), Assets.woodMat);
-    sgStock.position.set(0, -0.02, 0.1);
-    sg.add(sgStock);
-    this.models['Shotgun'] = sg;
-
-    // Hammer Viewmodel
-    const hm = new THREE.Group();
-    const handle = new THREE.Mesh(new THREE.CylinderGeometry(0.025, 0.025, 0.46, 8), Assets.woodMat);
-    hm.add(handle);
-    const head = new THREE.Mesh(new THREE.BoxGeometry(0.08, 0.12, 0.18), Assets.metalMat);
-    head.position.set(0, 0.22, -0.03);
-    hm.add(head);
-    hm.rotation.x = 0.4;
-    this.models['Hammer'] = hm;
-
-    // Gasoline Can Viewmodel
-    const gas = new THREE.Group();
-    const gasBody = new THREE.Mesh(new THREE.BoxGeometry(0.24, 0.32, 0.18), Assets.bloodMat);
-    gas.add(gasBody);
-    const spout = new THREE.Mesh(new THREE.CylinderGeometry(0.02, 0.02, 0.12, 6), Assets.metalMat);
-    spout.position.set(0.08, 0.2, 0);
-    gas.add(spout);
-    this.models['Gasoline Can'] = gas;
-
-    // Keys Viewmodel
-    const key = new THREE.Group();
-    const ring = new THREE.Mesh(new THREE.TorusGeometry(0.06, 0.015, 6, 12), Assets.metalMat);
-    key.add(ring);
-    const stem = new THREE.Mesh(new THREE.CylinderGeometry(0.012, 0.012, 0.18, 6), Assets.metalMat);
-    stem.rotation.x = Math.PI * 0.5;
-    stem.position.set(0, 0, -0.09);
-    key.add(stem);
-    this.models['GenericKey'] = key;
-
-    // Granny Player (GP) Mallet Bat Viewmodel
-    const batGroup = new THREE.Group();
-    const batMesh = new THREE.Mesh(new THREE.CylinderGeometry(0.045, 0.07, 1.1, 8), Assets.woodMat);
-    batMesh.position.set(0.1, 0.1, -0.2);
-    batMesh.rotation.set(0.5, 0, -0.3);
-    batGroup.add(batMesh);
-    this.models['GP_Bat'] = batGroup;
-    this.gpBat = batGroup;
-
-    Object.values(this.models).forEach(m => { m.visible = false; this.group.add(m); });
-  },
-
-  setHeldItem(itemName) {
-    Object.values(this.models).forEach(m => m.visible = false);
-    this.activeKey = itemName;
-    if (!itemName) return;
-
-    if (GameState.isGP) {
-      this.models['GP_Bat'].visible = true;
-      return;
-    }
-
-    if (this.models[itemName]) {
-      this.models[itemName].visible = true;
-    } else if (itemName.includes('Key')) {
-      this.models['GenericKey'].visible = true;
-    }
-  },
-
-  triggerBatSwing() {
-    if (this.isSwinging) return;
-    this.isSwinging = true;
-    this.swingTime = 0;
-  },
-
-  animate(dt, isMoving) {
-    if (this.isSwinging && this.gpBat) {
-      this.swingTime += dt * 6.5;
-      this.gpBat.rotation.x = 0.5 - Math.sin(this.swingTime) * 1.4;
-      this.gpBat.rotation.y = Math.sin(this.swingTime) * 0.8;
-      if (this.swingTime >= Math.PI) {
-        this.isSwinging = false;
-        this.gpBat.rotation.set(0, 0, 0);
-      }
-    } else if (isMoving) {
-      const t = performance.now() * 0.008;
-      this.group.position.x = 0.32 + Math.cos(t) * 0.015;
-      this.group.position.y = -0.28 + Math.sin(t * 2) * 0.015;
-    } else {
-      this.group.position.set(0.32, -0.28, -0.55);
-    }
-  }
-};
-
-// 4. PLAYER CONTROLLER WITH SAFE DUAL-STAGE CAMERA LIGHTING
-const Player = {
-  position: new THREE.Vector3(-6.5, 6.0, 8.5),
-  velocity: new THREE.Vector3(),
-  rotation: new THREE.Euler(0, -Math.PI * 0.5, 0, 'YXZ'),
-  radius: 0.35,
-  height: 1.75,
-  health: 100,
-  isCrouched: false,
-  isHiding: false,
-  isGhost: false,
-  isIntroPlaying: false,
-  introTimer: 0,
-  hidingSpot: null,
-  speed: 4.6,
-  crouchSpeed: 2.2,
-  limpMultiplier: 1.0,
-  activeSlot: 0,
-  isGrounded: false,
-
-  init(camera, scene) {
-    // Omnidirectional Player Torch Light (Avoids SpotLight NaN target bugs)
-    this.torchLight = new THREE.PointLight(0xffeedd, 2.5, 30);
-    this.torchLight.position.set(0, 0, 0.2);
-    camera.add(this.torchLight);
-
-    Viewmodel.init(camera);
-  },
-
-  prepareBedPose(camera) {
-    this.isIntroPlaying = true;
-    this.introTimer = 0;
-    this.isHiding = false;
-    this.position.set(-8.8, 6.0, 9.5);
-    this.rotation.set(0.2, -Math.PI * 0.5, 0);
-
-    if (camera) {
-      camera.position.set(-8.8, 7.45, 9.5);
-      camera.quaternion.setFromEuler(this.rotation);
-    }
-  },
-
-  startWakeUpIntro() {
-    this.isIntroPlaying = true;
-    this.introTimer = 0;
-    this.isHiding = false;
-
-    const eyelid = document.getElementById('eyelid-overlay');
-    if (eyelid) {
-      eyelid.style.display = 'none';
-      eyelid.style.opacity = '0';
-    }
-  },
-
-  update(dt, camera) {
-    // A. WAKE-UP BED ANIMATION PROGRESSION (Smooth 2.4s rise & step onto floor)
-    if (this.isIntroPlaying) {
-      this.introTimer += dt;
-
-      if (this.introTimer < 1.2) {
-        camera.position.set(-8.8, 7.45, 9.5);
-        this.rotation.x = 0.2 - Math.sin(this.introTimer * 3.0) * 0.05;
-        this.rotation.y = -Math.PI * 0.5 + Math.cos(this.introTimer * 2.0) * 0.1;
-      } else if (this.introTimer < 2.4) {
-        const t = (this.introTimer - 1.2) / 1.2;
-        camera.position.x = THREE.MathUtils.lerp(-8.8, -6.5, t);
-        camera.position.y = THREE.MathUtils.lerp(7.45, 7.62, t);
-        camera.position.z = THREE.MathUtils.lerp(9.5, 8.5, t);
-        this.rotation.x = THREE.MathUtils.lerp(0.2, 0.0, t);
-      } else {
-        this.isIntroPlaying = false;
-        this.position.set(-6.5, 6.0, 8.5);
-        this.velocity.set(0, 0, 0);
-
-        document.getElementById('hud').style.display = 'block';
-        if (document.getElementById('opt-mobile-mode').checked) {
-          document.getElementById('mobile-controls').style.display = 'block';
-        } else {
-          document.getElementById('click-to-focus').style.display = 'flex';
-        }
-      }
-
-      camera.quaternion.setFromEuler(this.rotation);
-      return;
-    }
-
-    // B. GHOST SPECTATOR NOCLIP FLIGHT
-    if (this.isGhost) {
-      const ghostSpd = 7.0;
-      const fwd = new THREE.Vector3(0, 0, -1).applyEuler(this.rotation);
-      const right = new THREE.Vector3(1, 0, 0).applyEuler(this.rotation);
-
-      if (Input.keys['KeyW']) this.position.addScaledVector(fwd, ghostSpd * dt);
-      if (Input.keys['KeyS']) this.position.addScaledVector(fwd, -ghostSpd * dt);
-      if (Input.keys['KeyA']) this.position.addScaledVector(right, -ghostSpd * dt);
-      if (Input.keys['KeyD']) this.position.addScaledVector(right, ghostSpd * dt);
-      if (Input.keys['Space']) this.position.y += ghostSpd * dt;
-      if (Input.keys['KeyC']) this.position.y -= ghostSpd * dt;
-
-      camera.position.copy(this.position);
-      camera.quaternion.setFromEuler(this.rotation);
-      return;
-    }
-
-    // C. UNDER-BED FREE LOOK
-    if (this.isHiding) {
-      if (this.hidingSpot) {
-        camera.position.copy(this.hidingSpot.position);
-      }
-      camera.quaternion.setFromEuler(this.rotation);
-      return;
-    }
-
-    // D. FIRST-PERSON MOVEMENT & GRAVITY
-    const curSpeed = (this.isCrouched ? this.crouchSpeed : this.speed) * this.limpMultiplier;
-    const move = new THREE.Vector3();
-    if (Input.keys['KeyW']) move.z -= 1;
-    if (Input.keys['KeyS']) move.z += 1;
-    if (Input.keys['KeyA']) move.x -= 1;
-    if (Input.keys['KeyD']) move.x += 1;
-
-    if (Input.touchMoveDir.lengthSq() > 0.01) {
-      move.x += Input.touchMoveDir.x;
-      move.z += Input.touchMoveDir.y;
-    }
-
-    const isMoving = move.lengthSq() > 0.01;
-    if (isMoving) {
-      move.normalize();
-      move.applyAxisAngle(new THREE.Vector3(0, 1, 0), this.rotation.y);
-    }
-
-    if (GameState.funMode) {
-      if (Input.keys['KeyZ']) this.velocity.y = 4.0;
-      else if (Input.keys['KeyX']) this.velocity.y = -4.0;
-      else this.velocity.y *= 0.95;
-    } else {
-      this.velocity.y -= 22 * dt;
-      if (this.velocity.y < -25) this.velocity.y = -25;
-    }
-
-    const dx = move.x * curSpeed * dt;
-    const dz = move.z * curSpeed * dt;
-    const dy = this.velocity.y * dt;
-
-    if (dx !== 0) this.moveAxis(dx, 0);
-    if (dz !== 0) this.moveAxis(dz, 2);
-
-    this.moveVertical(dy);
-
-    const eyeHeight = this.isCrouched ? 0.95 : (GameState.isGP ? 2.0 : 1.62);
-    camera.position.set(this.position.x, this.position.y + eyeHeight, this.position.z);
-    camera.quaternion.setFromEuler(this.rotation);
-
-    Viewmodel.animate(dt, isMoving);
-    this.checkDynamicCollisions(move, curSpeed);
-  },
-
-  checkDynamicCollisions(moveDir, speed) {
-    const now = performance.now();
-
-    for (let i = 0; i < House.physicsItems.length; i++) {
-      const item = House.physicsItems[i];
-      if (item.inInventory) continue;
-
-      const dx = this.position.x - item.group.position.x;
-      const dz = this.position.z - item.group.position.z;
-      const distSq = dx * dx + dz * dz;
-      const minDist = this.radius + item.radius;
-
-      if (distSq < (minDist * minDist) && distSq > 0.001) {
-        const dist = Math.sqrt(distSq);
-        const nx = dx / dist;
-        const nz = dz / dist;
-        const pushForce = Math.max(speed * 0.8, 2.5);
-
-        item.velocity.x -= nx * pushForce;
-        item.velocity.z -= nz * pushForce;
-
-        if (now - item.lastPushTime > 400) {
-          item.lastPushTime = now;
-          audio.playItemDrop(item.name);
-          MonsterAI.hearNoise(item.group.position, 12);
-        }
-      }
-    }
-
-    for (let i = 0; i < House.dynamicProps.length; i++) {
-      const prop = House.dynamicProps[i];
-      if (prop.type === 'table' && !prop.isTipped) {
-        const dx = this.position.x - prop.group.position.x;
-        const dz = this.position.z - prop.group.position.z;
-        const distSq = dx * dx + dz * dz;
-
-        if (distSq < (this.radius + prop.radius) * (this.radius + prop.radius)) {
-          const dist = Math.sqrt(distSq);
-          prop.isTipped = true;
-          prop.rotVel = Math.PI * 1.5;
-          prop.velocity.set(-(dx / dist) * 2.0, 0, -(dz / dist) * 2.0);
-
-          audio.playItemDrop('Table');
-          MonsterAI.hearNoise(prop.group.position, 25);
-          showPrompt('You knocked over the bedside table!');
-        }
-      } else if (prop.type === 'painting' && !prop.isFallen) {
-        const dist = this.position.distanceTo(prop.group.position);
-        if (dist < 0.9) {
-          prop.isFallen = true;
-          prop.velocity.set(0, -3.0, 0);
-          audio.playPaintingDrop();
-          MonsterAI.hearNoise(prop.group.position, 18);
-        }
-      }
-    }
-  },
-
-  moveAxis(delta, axisIndex) {
-    const target = this.position.clone();
-    if (axisIndex === 0) target.x += delta;
-    if (axisIndex === 2) target.z += delta;
-
-    const pMinX = target.x - this.radius;
-    const pMaxX = target.x + this.radius;
-    const pMinZ = target.z - this.radius;
-    const pMaxZ = target.z + this.radius;
-    const pMinY = target.y;
-    const pMaxY = target.y + (this.isCrouched ? 1.0 : this.height);
-    const maxStepHeight = 0.48;
-
-    let stepUpY = target.y;
-
-    for (let i = 0; i < CollisionWorld.boxes.length; i++) {
-      const box = CollisionWorld.boxes[i];
-      const xOverlap = pMinX < box.max.x && pMaxX > box.min.x;
-      const zOverlap = pMinZ < box.max.z && pMaxZ > box.min.z;
-
-      if (xOverlap && zOverlap) {
-        if (box.max.y <= pMinY + 0.08) continue;
-        if (box.min.y >= pMaxY - 0.08) continue;
-
-        const heightDiff = box.max.y - pMinY;
-        if (heightDiff > 0.08 && heightDiff <= maxStepHeight) {
-          if (box.max.y > stepUpY) stepUpY = box.max.y;
-          continue;
-        }
-        return;
-      }
-    }
-
-    if (axisIndex === 0) this.position.x = target.x;
-    if (axisIndex === 2) this.position.z = target.z;
-    this.position.y = stepUpY;
-  },
-
-  moveVertical(dy) {
-    if (GameState.funMode) {
-      this.position.y += dy;
-      return;
-    }
-
-    const targetY = this.position.y + dy;
-    const pMinX = this.position.x - this.radius;
-    const pMaxX = this.position.x + this.radius;
-    const pMinZ = this.position.z - this.radius;
-    const pMaxZ = this.position.z + this.radius;
-    const pHeight = this.isCrouched ? 1.0 : this.height;
-
-    this.isGrounded = false;
-
-    if (dy <= 0) {
-      let highestFloor = -999;
-      for (let i = 0; i < CollisionWorld.boxes.length; i++) {
-        const box = CollisionWorld.boxes[i];
-        if (pMinX < box.max.x && pMaxX > box.min.x && pMinZ < box.max.z && pMaxZ > box.min.z) {
-          if (box.max.y <= this.position.y + 0.25 && box.max.y >= targetY - 0.25) {
-            if (box.max.y > highestFloor) highestFloor = box.max.y;
-          }
-        }
-      }
-
-      if (highestFloor > -900) {
-        this.position.y = highestFloor;
-        this.velocity.y = 0;
-        this.isGrounded = true;
-        return;
-      }
-
-      if (targetY < -12.0) {
-        this.position.y = -12.0;
-        this.velocity.y = 0;
-        this.isGrounded = true;
-        return;
-      }
-
-      this.position.y = targetY;
-    } else {
-      for (let i = 0; i < CollisionWorld.boxes.length; i++) {
-        const box = CollisionWorld.boxes[i];
-        if (pMinX < box.max.x && pMaxX > box.min.x && pMinZ < box.max.z && pMaxZ > box.min.z) {
-          if (box.min.y >= this.position.y + pHeight && box.min.y <= targetY + pHeight) {
-            this.velocity.y = 0;
-            this.position.y = box.min.y - pHeight;
-            return;
-          }
-        }
-      }
-      this.position.y = targetY;
-    }
-  },
-
-  fireWeapon(camera) {
-    if (GameState.isGP) {
-      Viewmodel.triggerBatSwing();
-      audio.playBatHit();
-
-      const hitDist = 2.2;
-      for (const [id, peer] of Object.entries(NetworkEngine.peers)) {
-        if (peer.mesh && !peer.isGhost) {
-          const toPeer = new THREE.Vector3().subVectors(peer.mesh.position, this.position);
-          if (toPeer.length() < hitDist) {
-            const fwd = new THREE.Vector3(0, 0, -1).applyEuler(this.rotation);
-            toPeer.normalize();
-            if (fwd.angleTo(toPeer) < Math.PI * 0.35) {
-              NetworkEngine.broadcastKill(id);
+    getClosestNode(pos, preferredFloor = null) {
+        let bestNode = null;
+        let minDist = Infinity;
+
+        for (const [id, node] of this.nodes) {
+            if (preferredFloor !== null && Math.abs(node.floor - preferredFloor) > 0.5) {
+                continue;
             }
-          }
+            const d = pos.distanceTo(node.pos);
+            if (d < minDist) {
+                minDist = d;
+                bestNode = node;
+            }
         }
-      }
-      return;
+        return bestNode;
     }
 
-    const cur = Inventory.items[this.activeSlot];
-    if (!cur) return;
+    findPath(startPos, targetPos) {
+        const startNode = this.getClosestNode(startPos);
+        const endNode = this.getClosestNode(targetPos);
 
-    if (cur.name === 'Tranquilizer Crossbow') {
-      audio.playCrossbow();
-      Viewmodel.loadedDart.visible = false;
-      setTimeout(() => { Viewmodel.loadedDart.visible = true; }, 1200);
+        if (!startNode || !endNode) return [];
+        if (startNode.id === endNode.id) return [endNode.pos.clone(), targetPos.clone()];
 
-      if (MonsterAI.mesh && camera.position.distanceTo(MonsterAI.mesh.position) < 18) {
-        MonsterAI.stun(MonsterAI.getStunDuration());
-      }
-      NetworkEngine.sendShot(camera.position, new THREE.Vector3(0, 0, -1).applyEuler(this.rotation), 40, 'dart');
-    } else if (cur.name === 'Shotgun') {
-      audio.playShotgun();
-      if (MonsterAI.mesh && camera.position.distanceTo(MonsterAI.mesh.position) < 10) {
-        MonsterAI.stun(MonsterAI.getStunDuration());
-      }
-      NetworkEngine.sendShot(camera.position, new THREE.Vector3(0, 0, -1).applyEuler(this.rotation), 100, 'shotgun');
+        // A* Pathfinding Implementation
+        const openSet = new Set([startNode.id]);
+        const cameFrom = new Map();
+        const gScore = new Map();
+        const fScore = new Map();
+
+        for (const [id] of this.nodes) {
+            gScore.set(id, Infinity);
+            fScore.set(id, Infinity);
+        }
+
+        gScore.set(startNode.id, 0);
+        fScore.set(startNode.id, startNode.pos.distanceTo(endNode.pos));
+
+        while (openSet.size > 0) {
+            let currentId = null;
+            let lowestF = Infinity;
+            for (const id of openSet) {
+                const f = fScore.get(id);
+                if (f < lowestF) {
+                    lowestF = f;
+                    currentId = id;
+                }
+            }
+
+            if (currentId === endNode.id) {
+                // Reconstruct Path
+                const path = [targetPos.clone()];
+                let curr = currentId;
+                while (cameFrom.has(curr)) {
+                    path.unshift(this.nodes.get(curr).pos.clone());
+                    curr = cameFrom.get(curr);
+                }
+                path.unshift(startPos.clone());
+                return path;
+            }
+
+            openSet.delete(currentId);
+            const currentNode = this.nodes.get(currentId);
+
+            for (const edge of currentNode.edges) {
+                const tentativeG = gScore.get(currentId) + edge.weight;
+                if (tentativeG < gScore.get(edge.to)) {
+                    cameFrom.set(edge.to, currentId);
+                    gScore.set(edge.to, tentativeG);
+                    const neighborPos = this.nodes.get(edge.to).pos;
+                    fScore.set(edge.to, tentativeG + neighborPos.distanceTo(endNode.pos));
+                    openSet.add(edge.to);
+                }
+            }
+        }
+        return [targetPos.clone()]; // Fallback
     }
-  },
+}
 
-  becomeGhost(corpsePos) {
-    this.isGhost = true;
-    document.getElementById('ghost-indicator').style.display = 'block';
-    document.getElementById('stealth-indicator').innerText = 'STATUS: GHOST (SPECTATOR)';
-    spawnDeadCorpseMesh(scene, corpsePos || this.position);
-  }
-};
+// ============================================================================
+// 2. COMPLETE HOUSE WAYPOINT REGISTRY
+// ============================================================================
+export function buildHouseNavGraph() {
+    const nav = new NavGraph();
 
-// 5. INVENTORY SYSTEM (SILENT PICKUP & DROP)
-const Inventory = {
-  items: [null, null, null, null, null],
+    // --- LEVEL -2: SUB-BASEMENT & GARAGE (Y = -12.0) ---
+    nav.addNode("L2_GARAGE_CENTER", 0.0, -12.0, 0.0, -2);
+    nav.addNode("L2_CAR_DRIVER", -2.5, -12.0, 1.5, -2);
+    nav.addNode("L2_GARAGE_DOOR", 0.0, -12.0, -8.0, -2);
+    nav.addNode("L2_SPIDER_TUNNEL", 8.0, -12.0, 0.0, -2);
+    nav.addNode("L2_SPIDER_CELLAR", 14.0, -12.0, 0.0, -2);
+    nav.addNode("L2_SEWER_DRAIN", 14.0, -12.0, -7.0, -2);
+    nav.addNode("L2_SEWER_CELL", 8.0, -12.0, -7.0, -2);
+    nav.addNode("L2_RAMP_BOTTOM", -7.0, -12.0, 4.0, -2);
 
-  add(itemRecord) {
-    for (let i = 0; i < 5; i++) {
-      if (!this.items[i]) {
-        this.items[i] = itemRecord;
-        this.render();
-        this.syncViewmodel();
+    nav.connect("L2_GARAGE_CENTER", "L2_CAR_DRIVER");
+    nav.connect("L2_GARAGE_CENTER", "L2_GARAGE_DOOR");
+    nav.connect("L2_GARAGE_CENTER", "L2_SPIDER_TUNNEL");
+    nav.connect("L2_SPIDER_TUNNEL", "L2_SPIDER_CELLAR");
+    nav.connect("L2_SPIDER_CELLAR", "L2_SEWER_DRAIN");
+    nav.connect("L2_SEWER_DRAIN", "L2_SEWER_CELL");
+    nav.connect("L2_GARAGE_CENTER", "L2_RAMP_BOTTOM");
+
+    // --- LEVEL -1: MAIN BASEMENT (Y = -6.0) ---
+    nav.addNode("L1_RAMP_TOP", -7.0, -6.0, 4.0, -1);
+    nav.addNode("L1_BASEMENT_HALL", 0.0, -6.0, 0.0, -1);
+    nav.addNode("L1_WORKBENCH", -3.0, -6.0, -2.0, -1);
+    nav.addNode("L1_SAUNA_DOOR", 4.0, -6.0, 2.0, -1);
+    nav.addNode("L1_SAUNA_INTERIOR", 8.0, -6.0, 2.0, -1);
+    nav.addNode("L1_SECRET_TUNNEL_BASE", -6.0, -6.0, -5.0, -1);
+    nav.addNode("L1_BASEMENT_STAIRS_BOTTOM", 3.0, -6.0, -4.0, -1);
+
+    nav.connect("L2_RAMP_BOTTOM", "L1_RAMP_TOP"); // Inter-floor garage ramp
+    nav.connect("L1_RAMP_TOP", "L1_BASEMENT_HALL");
+    nav.connect("L1_BASEMENT_HALL", "L1_WORKBENCH");
+    nav.connect("L1_BASEMENT_HALL", "L1_SAUNA_DOOR");
+    nav.connect("L1_SAUNA_DOOR", "L1_SAUNA_INTERIOR");
+    nav.connect("L1_BASEMENT_HALL", "L1_SECRET_TUNNEL_BASE");
+    nav.connect("L1_BASEMENT_HALL", "L1_BASEMENT_STAIRS_BOTTOM");
+
+    // --- LEVEL 0: GROUND FLOOR (Y = 0.0) ---
+    nav.addNode("L0_BASEMENT_STAIRS_TOP", 3.0, 0.0, -4.0, 0);
+    nav.addNode("L0_MAIN_FOYER", 0.0, 0.0, 0.0, 0);
+    nav.addNode("L0_FRONT_DOOR", 0.0, 0.0, -6.5, 0);
+    nav.addNode("L0_STAIRCASE_CLOSET", 4.0, 0.0, -1.0, 0);
+    nav.addNode("L0_KITCHEN_ENTRANCE", -4.0, 0.0, 0.0, 0);
+    nav.addNode("L0_KITCHEN_CENTER", -7.0, 0.0, 0.0, 0);
+    nav.addNode("L0_DINING_ROOM", -7.0, 0.0, 5.0, 0);
+    nav.addNode("L0_STUDY_ROOM", 4.0, 0.0, 5.0, 0);
+    nav.addNode("L0_BACKYARD_WINDOW", -9.0, 0.0, 5.0, 0);
+    nav.addNode("L0_COURTYARD_WELL", -12.0, 0.0, 8.0, 0);
+    nav.addNode("L0_COURTYARD_PLAYHOUSE", -16.0, 0.0, 3.0, 0);
+    nav.addNode("L0_GRAND_STAIRS_BOTTOM", 0.0, 0.0, 3.0, 0);
+
+    nav.connect("L1_BASEMENT_STAIRS_BOTTOM", "L0_BASEMENT_STAIRS_TOP"); // Inter-floor basement stairs
+    nav.connect("L0_BASEMENT_STAIRS_TOP", "L0_MAIN_FOYER");
+    nav.connect("L0_MAIN_FOYER", "L0_FRONT_DOOR");
+    nav.connect("L0_MAIN_FOYER", "L0_STAIRCASE_CLOSET");
+    nav.connect("L0_MAIN_FOYER", "L0_KITCHEN_ENTRANCE");
+    nav.connect("L0_KITCHEN_ENTRANCE", "L0_KITCHEN_CENTER");
+    nav.connect("L0_KITCHEN_CENTER", "L0_DINING_ROOM");
+    nav.connect("L0_DINING_ROOM", "L0_STUDY_ROOM");
+    nav.connect("L0_STUDY_ROOM", "L0_MAIN_FOYER");
+    nav.connect("L0_DINING_ROOM", "L0_BACKYARD_WINDOW");
+    nav.connect("L0_BACKYARD_WINDOW", "L0_COURTYARD_WELL");
+    nav.connect("L0_COURTYARD_WELL", "L0_COURTYARD_PLAYHOUSE");
+    nav.connect("L0_MAIN_FOYER", "L0_GRAND_STAIRS_BOTTOM");
+
+    // --- LEVEL 1: SECOND FLOOR (Y = 6.0) ---
+    nav.addNode("L1_GRAND_STAIRS_TOP", 0.0, 6.0, 3.0, 1);
+    nav.addNode("L1_MAIN_LANDING", 0.0, 6.0, 0.0, 1);
+    nav.addNode("L1_BEDROOM1_SPAWN", -4.0, 6.0, -3.0, 1); // Player Bed Spawn
+    nav.addNode("L1_BATHROOM", -4.0, 6.0, 2.0, 1);
+    nav.addNode("L1_BEDROOM2", 4.0, 6.0, -3.0, 1);
+    nav.addNode("L1_BEDROOM3_CLOSET", 5.0, 6.0, 2.0, 1);
+    nav.addNode("L1_SECRET_PASSAGE", 7.5, 6.0, 2.0, 1);
+    nav.addNode("L1_CROW_MEAT_ROOM", 8.0, 6.0, -3.0, 1);
+    nav.addNode("L1_ATTIC_STAIRS_BOTTOM", 2.0, 6.0, 5.0, 1);
+
+    nav.connect("L0_GRAND_STAIRS_BOTTOM", "L1_GRAND_STAIRS_TOP"); // Inter-floor grand stairs
+    nav.connect("L1_GRAND_STAIRS_TOP", "L1_MAIN_LANDING");
+    nav.connect("L1_MAIN_LANDING", "L1_BEDROOM1_SPAWN");
+    nav.connect("L1_MAIN_LANDING", "L1_BATHROOM");
+    nav.connect("L1_MAIN_LANDING", "L1_BEDROOM2");
+    nav.connect("L1_MAIN_LANDING", "L1_BEDROOM3_CLOSET");
+    nav.connect("L1_BEDROOM3_CLOSET", "L1_SECRET_PASSAGE");
+    nav.connect("L1_SECRET_PASSAGE", "L1_CROW_MEAT_ROOM");
+    nav.connect("L1_MAIN_LANDING", "L1_ATTIC_STAIRS_BOTTOM");
+
+    // Connect vertical secret tunnel (Basement Level -1 to Meat Room Level 1)
+    nav.connect("L1_SECRET_TUNNEL_BASE", "L1_CROW_MEAT_ROOM");
+
+    // --- LEVEL 2: THIRD FLOOR / ATTIC (Y = 11.5) ---
+    nav.addNode("L2_ATTIC_STAIRS_TOP", 2.0, 11.5, 5.0, 2);
+    nav.addNode("L2_ATTIC_LANDING", 0.0, 11.5, 2.0, 2);
+    nav.addNode("L2_CREAK_PLANK_ZONE", 0.0, 11.5, -2.0, 2);
+    nav.addNode("L2_JAIL_ROOM", -4.0, 11.5, -3.0, 2);
+    nav.addNode("L2_SPECIAL_SPIDER", 4.0, 11.5, -3.0, 2);
+    nav.addNode("L2_NURSERY", -4.0, 11.5, 2.0, 2);
+    nav.addNode("L2_SECRET_TOP_RAFTERS", 0.0, 11.5, 5.0, 2);
+
+    nav.connect("L1_ATTIC_STAIRS_BOTTOM", "L2_ATTIC_STAIRS_TOP"); // Inter-floor attic stairs
+    nav.connect("L2_ATTIC_STAIRS_TOP", "L2_ATTIC_LANDING");
+    nav.connect("L2_ATTIC_LANDING", "L2_CREAK_PLANK_ZONE");
+    nav.connect("L2_CREAK_PLANK_ZONE", "L2_JAIL_ROOM");
+    nav.connect("L2_CREAK_PLANK_ZONE", "L2_SPECIAL_SPIDER");
+    nav.connect("L2_ATTIC_LANDING", "L2_NURSERY");
+    nav.connect("L2_ATTIC_LANDING", "L2_SECRET_TOP_RAFTERS");
+
+    return nav;
+}
+
+// ============================================================================
+// 3. OVERHAULED MONSTER AI CLASS
+// ============================================================================
+export class MonsterAI {
+    constructor(scene, collisionWorld, navGraph, audio) {
+        this.scene = scene;
+        this.collisionWorld = collisionWorld;
+        this.nav = navGraph;
+        this.audio = audio;
+
+        // Visual Construction (Granny / Triple T with custom motif)
+        this.group = new THREE.Group();
+        this.buildMesh();
+        this.scene.add(this.group);
+
+        // State Machine States: SLEEPING, PATROL, INVESTIGATE, CHASE, SEARCH_LOOK_AROUND
+        this.state = "SLEEPING";
+        this.graceTimer = 15.0; // 15s initial spawn grace period
+        this.speed = 3.2; // Base walk speed
+        this.chaseSpeed = 5.2; // Aggro sprint speed
+
+        // Sensory Parameters
+        this.fovDegrees = 75.0;
+        this.viewDistance = 22.0;
+        this.boundingRadius = 0.55;
+        this.height = 1.85;
+
+        // Path Execution
+        this.currentPath = [];
+        this.pathIndex = 0;
+        this.targetDestination = new THREE.Vector3();
+
+        // Memory & Search Routine
+        this.lastKnownPlayerPos = new THREE.Vector3();
+        this.investigateWaitTime = 0.0;
+        this.lookAroundAngle = 0;
+        this.patrolCycle = [
+            "L1_BASEMENT_HALL",
+            "L0_MAIN_FOYER",
+            "L0_KITCHEN_CENTER",
+            "L1_MAIN_LANDING",
+            "L1_BEDROOM1_SPAWN",
+            "L2_ATTIC_LANDING",
+            "L2_JAIL_ROOM",
+            "L0_DINING_ROOM",
+            "L2_GARAGE_CENTER"
+        ];
+        this.patrolIndex = 0;
+
+        // Spawn far away in Basement Level -1
+        this.respawnAtSafeLocation();
+    }
+
+    buildMesh() {
+        const bodyGeo = new THREE.CylinderGeometry(0.35, 0.55, 1.4, 12);
+        const bodyMat = new THREE.MeshStandardMaterial({ color: 0x4a3b32, roughness: 0.85 });
+        this.bodyMesh = new THREE.Mesh(bodyGeo, bodyMat);
+        this.bodyMesh.position.y = 0.7;
+        this.group.add(this.bodyMesh);
+
+        const headGeo = new THREE.SphereGeometry(0.28, 12, 12);
+        const headMat = new THREE.MeshStandardMaterial({ color: 0x82776d, roughness: 0.6 });
+        this.headMesh = new THREE.Mesh(headGeo, headMat);
+        this.headMesh.position.y = 1.55;
+        this.group.add(this.headMesh);
+
+        // Weapon (Bloody Bat)
+        const batGeo = new THREE.CylinderGeometry(0.04, 0.06, 0.9, 8);
+        const batMat = new THREE.MeshStandardMaterial({ color: 0x3d2817 });
+        this.batMesh = new THREE.Mesh(batGeo, batMat);
+        this.batMesh.position.set(0.45, 0.8, 0.3);
+        this.batMesh.rotation.x = Math.PI / 4;
+        this.group.add(this.batMesh);
+    }
+
+    respawnAtSafeLocation() {
+        // Always place in Basement Hallway on init/day reset
+        const spawnNode = this.nav.nodes.get("L1_BASEMENT_HALL");
+        if (spawnNode) {
+            this.group.position.copy(spawnNode.pos);
+        } else {
+            this.group.position.set(0.0, -6.0, 0.0);
+        }
+        this.state = "SLEEPING";
+        this.graceTimer = 15.0; // Grace period active
+        this.currentPath = [];
+    }
+
+    triggerRespawnGrace(seconds = 10.0) {
+        this.respawnAtSafeLocation();
+        this.graceTimer = seconds;
+        this.state = "SLEEPING";
+    }
+
+    hearNoise(soundPos, noiseRadius = 20.0) {
+        // If within awakening grace period, noise is ignored entirely
+        if (this.graceTimer > 0) return;
+
+        const dist = this.group.position.distanceTo(soundPos);
+        if (dist <= noiseRadius) {
+            // Priority: Do not abort an active direct visual chase unless the sound is very close
+            if (this.state === "CHASE" && dist > 6.0) return;
+
+            this.state = "INVESTIGATE";
+            this.investigateWaitTime = 0.0;
+            this.lastKnownPlayerPos.copy(soundPos);
+            this.recalculatePath(soundPos);
+            if (this.audio && this.audio.playCreepChuckle) {
+                this.audio.playCreepChuckle();
+            }
+        }
+    }
+
+    canSeePlayer(player) {
+        if (this.graceTimer > 0) return false;
+        if (player.isHiding) return false;
+
+        const aiEye = this.group.position.clone().add(new THREE.Vector3(0, 1.5, 0));
+        const playerEye = player.position.clone().add(new THREE.Vector3(0, 1.2, 0));
+        const dist = aiEye.distanceTo(playerEye);
+
+        if (dist > this.viewDistance) return false;
+
+        // Check Vision Cone (FOV)
+        const forward = new THREE.Vector3(0, 0, 1).applyQuaternion(this.group.quaternion).normalize();
+        const toPlayer = playerEye.clone().sub(aiEye).normalize();
+        const angle = THREE.MathUtils.radToDeg(forward.angleTo(toPlayer));
+
+        if (angle > this.fovDegrees * 0.5) return false;
+
+        // Line-of-Sight Occlusion Raycast against Collision Geometry
+        const ray = new THREE.Ray(aiEye, toPlayer);
+        const testBox = new THREE.Box3();
+
+        for (let i = 0; i < this.collisionWorld.boxes.length; i++) {
+            testBox.copy(this.collisionWorld.boxes[i]);
+            // Ignore small steps/floor slabs to prevent floor false-positives
+            if (testBox.max.y - testBox.min.y < 0.3) continue;
+
+            const intersectionPoint = new THREE.Vector3();
+            if (ray.intersectBox(testBox, intersectionPoint)) {
+                if (aiEye.distanceTo(intersectionPoint) < dist - 0.2) {
+                    return false; // Vision occluded by wall/door
+                }
+            }
+        }
         return true;
-      }
     }
-    return false;
-  },
 
-  remove(name) {
-    for (let i = 0; i < 5; i++) {
-      if (this.items[i] && this.items[i].name === name) {
-        this.items[i] = null;
-        this.render();
-        this.syncViewmodel();
-        return true;
-      }
+    recalculatePath(targetPos) {
+        this.currentPath = this.nav.findPath(this.group.position, targetPos);
+        this.pathIndex = 0;
     }
-    return false;
-  },
 
-  has(name) {
-    return this.items.some(it => it && it.name === name);
-  },
+    moveWithAABBCollision(deltaMove) {
+        const originalPos = this.group.position.clone();
 
-  dropCurrent(camera, scene) {
-    const cur = this.items[Player.activeSlot];
-    if (!cur) return;
+        // 1. Move on X
+        this.group.position.x += deltaMove.x;
+        let aiBox = new THREE.Box3().setFromCenterAndSize(
+            this.group.position.clone().add(new THREE.Vector3(0, this.height * 0.5, 0)),
+            new THREE.Vector3(this.boundingRadius * 2, this.height, this.boundingRadius * 2)
+        );
 
-    this.items[Player.activeSlot] = null;
-    this.render();
-    this.syncViewmodel();
-
-    const fwd = new THREE.Vector3(0, 0, -1.2).applyEuler(Player.rotation);
-    const dropPos = camera.position.clone().add(fwd);
-    cur.group.position.copy(dropPos);
-    scene.add(cur.group);
-    cur.inInventory = false;
-
-    cur.velocity.copy(fwd.clone().multiplyScalar(4).add(new THREE.Vector3(0, 1.8, 0)));
-    cur.isGrounded = false;
-  },
-
-  selectSlot(idx) {
-    Player.activeSlot = (idx + 5) % 5;
-    for (let i = 0; i < 5; i++) {
-      document.getElementById(`slot-${i}`).classList.toggle('active', i === Player.activeSlot);
-    }
-    this.syncViewmodel();
-  },
-
-  syncViewmodel() {
-    const it = this.items[Player.activeSlot];
-    Viewmodel.setHeldItem(it ? it.name : null);
-  },
-
-  render() {
-    for (let i = 0; i < 5; i++) {
-      const slotEl = document.getElementById(`slot-${i}`).querySelector('.slot-name');
-      slotEl.innerText = this.items[i] ? this.items[i].name : 'EMPTY';
-    }
-  }
-};
-
-// 6. FUN MODE ZERO-G PHYSICS
-const FunPhysics = {
-  balls: [],
-
-  spawnBouncyBall(scene, pos, dir) {
-    const geo = new THREE.SphereGeometry(0.35, 12, 12);
-    const mat = new THREE.MeshStandardMaterial({
-      color: new THREE.Color().setHSL(Math.random(), 1.0, 0.5),
-      roughness: 0.1,
-      metalness: 0.2
-    });
-    const ballMesh = new THREE.Mesh(geo, mat);
-    ballMesh.position.copy(pos);
-    scene.add(ballMesh);
-
-    const ball = {
-      mesh: ballMesh,
-      velocity: dir.clone().multiplyScalar(12.0),
-      radius: 0.35
-    };
-    this.balls.push(ball);
-    audio.playBounce();
-  },
-
-  update(dt) {
-    for (let i = 0; i < this.balls.length; i++) {
-      const b = this.balls[i];
-      b.mesh.position.addScaledVector(b.velocity, dt);
-
-      for (let j = 0; j < CollisionWorld.boxes.length; j++) {
-        const box = CollisionWorld.boxes[j];
-        if (box.containsPoint(b.mesh.position)) {
-          b.velocity.negate().multiplyScalar(1.02);
-          audio.playBounce();
-          break;
+        for (let i = 0; i < this.collisionWorld.boxes.length; i++) {
+            const b = this.collisionWorld.boxes[i];
+            // Step-up tolerance check (<= 0.48m behaves like steps)
+            if (aiBox.intersectsBox(b)) {
+                if (b.max.y - originalPos.y <= 0.48 && b.max.y > originalPos.y) {
+                    this.group.position.y = b.max.y;
+                } else {
+                    this.group.position.x = originalPos.x; // Block X
+                    break;
+                }
+            }
         }
-      }
-    }
-  }
-};
 
-// 7. WORLD PROPS & INTERPOLATION
-function updatePhysicsAndWorld(dt) {
-  for (let i = 0; i < House.doors.length; i++) {
-    const door = House.doors[i];
-    if (Math.abs(door.currentAngle - door.targetAngle) > 0.01) {
-      door.currentAngle = THREE.MathUtils.damp(door.currentAngle, door.targetAngle, 10, dt);
-      door.pivot.rotation.y = door.currentAngle;
-    }
-  }
+        // 2. Move on Z
+        this.group.position.z += deltaMove.z;
+        aiBox.setFromCenterAndSize(
+            this.group.position.clone().add(new THREE.Vector3(0, this.height * 0.5, 0)),
+            new THREE.Vector3(this.boundingRadius * 2, this.height, this.boundingRadius * 2)
+        );
 
-  for (let i = 0; i < House.drawers.length; i++) {
-    const drawer = House.drawers[i];
-    if (Math.abs(drawer.currentZ - drawer.targetZ) > 0.005) {
-      drawer.currentZ = THREE.MathUtils.damp(drawer.currentZ, drawer.targetZ, 8, dt);
-      drawer.group.position.z = drawer.currentZ;
-    }
-  }
-
-  for (let i = 0; i < House.dynamicProps.length; i++) {
-    const prop = House.dynamicProps[i];
-    if (prop.type === 'table' && prop.isTipped && prop.group.rotation.z < Math.PI * 0.5) {
-      prop.group.rotation.z += prop.rotVel * dt;
-      prop.group.position.addScaledVector(prop.velocity, dt);
-      prop.velocity.multiplyScalar(0.92);
-
-      if (prop.vaseMesh) {
-        prop.vaseMesh.position.y = Math.max(0.1, prop.vaseMesh.position.y - 4.0 * dt);
-      }
-    } else if (prop.type === 'painting' && prop.isFallen && prop.group.position.y > -11.5) {
-      prop.group.position.addScaledVector(prop.velocity, dt);
-    }
-  }
-
-  for (let i = 0; i < House.physicsItems.length; i++) {
-    const item = House.physicsItems[i];
-    if (item.inInventory) continue;
-
-    if (!item.isGrounded) {
-      item.velocity.y -= (GameState.funMode ? 0 : 18) * dt;
-      item.group.position.addScaledVector(item.velocity, dt);
-
-      const pos = item.group.position;
-      for (let j = 0; j < CollisionWorld.boxes.length; j++) {
-        const box = CollisionWorld.boxes[j];
-        if (pos.x >= box.min.x && pos.x <= box.max.x && pos.z >= box.min.z && pos.z <= box.max.z) {
-          if (pos.y <= box.max.y + 0.15 && pos.y >= box.min.y) {
-            pos.y = box.max.y + 0.08;
-            item.isGrounded = true;
-            item.velocity.set(0, 0, 0);
-            audio.playItemDrop(item.name);
-            MonsterAI.hearNoise(pos, 12);
-            break;
-          }
+        for (let i = 0; i < this.collisionWorld.boxes.length; i++) {
+            const b = this.collisionWorld.boxes[i];
+            if (aiBox.intersectsBox(b)) {
+                if (b.max.y - originalPos.y <= 0.48 && b.max.y > originalPos.y) {
+                    this.group.position.y = b.max.y;
+                } else {
+                    this.group.position.z = originalPos.z; // Block Z
+                    break;
+                }
+            }
         }
-      }
-    }
-  }
 
-  if (GameState.funMode) {
-    FunPhysics.update(dt);
-  }
-}
-
-// 8. GRANNY TUNG TUNG SAHUR AI (CONE VISION, 5-TIER PATHFINDING & NO CORRUPT RAYCASTS)
-const MonsterAI = {
-  mesh: null,
-  state: 'PATROL',
-  speed: 2.3,
-  chaseSpeed: 3.9,
-  visionRange: 14.0,
-  visionAngle: Math.PI * 0.42,
-  hearingRadiusMod: 1.0,
-  stunTimer: 0,
-  currentPath: [],
-  targetPos: new THREE.Vector3(),
-  searchTimer: 0,
-  patrolNodes: [
-    'l_m1_hall', 'l0_foyer', 'l0_kitchen', 'l0_dining', 'l0_backyard',
-    'l1_hall_landing', 'l1_bed1', 'l1_bed2', 'l2_attic_landing', 'l_m2_garage'
-  ],
-  patrolIdx: 0,
-  animTime: 0,
-  rightArm: null,
-  head: null,
-  losCheckFrame: 0,
-  lastCanSeeResult: false,
-
-  init(scene) {
-    const g = new THREE.Group();
-
-    const sarongCanvas = document.createElement('canvas');
-    sarongCanvas.width = 128; sarongCanvas.height = 128;
-    const sCtx = sarongCanvas.getContext('2d');
-    sCtx.fillStyle = '#4a382a'; sCtx.fillRect(0, 0, 128, 128);
-    sCtx.fillStyle = '#b89055';
-    for (let i = 0; i < 64; i += 16) {
-      for (let j = 0; j < 64; j += 16) sCtx.fillRect(i * 2, j * 2, 4, 4);
-    }
-    const sarongTex = new THREE.CanvasTexture(sarongCanvas);
-    const gownMat = new THREE.MeshStandardMaterial({ map: sarongTex, roughness: 0.9 });
-    const woodMat = Assets.woodMat;
-    const skinMat = Assets.skinMat;
-
-    const torso = new THREE.Mesh(new THREE.CylinderGeometry(0.38, 0.72, 1.85, 10), gownMat);
-    torso.position.y = 1.3;
-    torso.rotation.x = 0.22;
-    g.add(torso);
-
-    const kentongan = new THREE.Mesh(new THREE.CylinderGeometry(0.12, 0.12, 0.75, 8), woodMat);
-    kentongan.rotation.z = Math.PI * 0.45;
-    kentongan.rotation.x = 0.3;
-    kentongan.position.set(0.1, 1.35, 0.48);
-    g.add(kentongan);
-
-    const headGroup = new THREE.Group();
-    headGroup.position.set(0, 2.35, 0.25);
-    const skull = new THREE.Mesh(new THREE.SphereGeometry(0.36, 10, 10), skinMat);
-    headGroup.add(skull);
-
-    const eyeMat = new THREE.MeshBasicMaterial({ color: 0xff0000 });
-    const eye1 = new THREE.Mesh(new THREE.SphereGeometry(0.065, 6, 6), eyeMat);
-    eye1.position.set(-0.13, 0.06, 0.32);
-    const eye2 = eye1.clone(); eye2.position.x = 0.13;
-    headGroup.add(eye1); headGroup.add(eye2);
-
-    const hair = new THREE.Mesh(new THREE.BoxGeometry(0.65, 0.2, 0.65), new THREE.MeshStandardMaterial({ color: 0x888888 }));
-    hair.position.set(0, 0.22, -0.05);
-    headGroup.add(hair);
-
-    g.add(headGroup);
-    this.head = headGroup;
-
-    const arm = new THREE.Group();
-    arm.position.set(0.65, 1.9, 0.15);
-    const armMesh = new THREE.Mesh(new THREE.CylinderGeometry(0.08, 0.08, 0.9, 6), gownMat);
-    armMesh.position.y = -0.45;
-    arm.add(armMesh);
-
-    const mallet = new THREE.Mesh(new THREE.CylinderGeometry(0.04, 0.06, 1.2, 6), woodMat);
-    mallet.position.set(0, -0.85, 0.25);
-    mallet.rotation.x = 0.5;
-    arm.add(mallet);
-
-    g.add(arm);
-    this.rightArm = arm;
-
-    // Default safety spawn: Level -1 Main Basement
-    g.position.set(0.0, LEVEL_ELEVATIONS.LEVEL_MINUS_1 + 0.5, 1.0);
-    scene.add(g);
-    this.mesh = g;
-
-    this.applyDifficultySettings();
-  },
-
-  applyDifficultySettings() {
-    const d = GameState.difficulty || 'normal';
-    if (d === 'easy') {
-      this.speed = 1.8; this.chaseSpeed = 2.9; this.visionRange = 10.0;
-      this.visionAngle = Math.PI * 0.33; this.hearingRadiusMod = 0.7;
-    } else if (d === 'normal') {
-      this.speed = 2.3; this.chaseSpeed = 3.9; this.visionRange = 14.0;
-      this.visionAngle = Math.PI * 0.42; this.hearingRadiusMod = 1.0;
-    } else if (d === 'hard') {
-      this.speed = 2.8; this.chaseSpeed = 4.8; this.visionRange = 18.0;
-      this.visionAngle = Math.PI * 0.50; this.hearingRadiusMod = 1.3;
-    } else if (d === 'extreme') {
-      this.speed = 3.3; this.chaseSpeed = 5.5; this.visionRange = 22.0;
-      this.visionAngle = Math.PI * 0.60; this.hearingRadiusMod = 1.6;
-    }
-  },
-
-  getStunDuration() {
-    const d = GameState.difficulty || 'normal';
-    if (d === 'easy') return 150;
-    if (d === 'normal') return 120;
-    if (d === 'hard') return 90;
-    return 60;
-  },
-
-  hasLineOfSightToPlayer() {
-    if (Player.isHiding || Player.isIntroPlaying || Player.isGhost || GameState.isDying || !GameState.inGame) return false;
-
-    this.losCheckFrame++;
-    if (this.losCheckFrame % 4 !== 0) return this.lastCanSeeResult;
-
-    _tempVecA.subVectors(Player.position, this.mesh.position);
-    const dist = _tempVecA.length();
-    if (dist > this.visionRange) {
-      this.lastCanSeeResult = false;
-      return false;
+        // 3. Move on Y (Ground clamp / Stair navigation)
+        this.group.position.y += deltaMove.y;
     }
 
-    const fwd = new THREE.Vector3(0, 0, 1).applyEuler(this.mesh.rotation);
-    _tempVecA.normalize();
-
-    // 75° Vision Cone: if her back is turned, she CANNOT see you
-    const angle = fwd.angleTo(_tempVecA);
-    if (angle > this.visionAngle) {
-      this.lastCanSeeResult = false;
-      return false;
-    }
-
-    // Proximity agro in same room (unless player is crouching)
-    if (dist < 4.5 && !Player.isCrouched) {
-      this.lastCanSeeResult = true;
-      return true;
-    }
-
-    _tempRayOrigin.set(this.mesh.position.x, this.mesh.position.y + 1.8, this.mesh.position.z);
-    const ray = new THREE.Ray(_tempRayOrigin, _tempVecA);
-
-    // Official Three.js Ray-Box intersection check
-    const walls = CollisionWorld.wallsAndDoors;
-    for (let i = 0; i < walls.length; i++) {
-      const box = walls[i];
-      if (ray.intersectBox(box, _tempClampPt) !== null) {
-        if (ray.origin.distanceTo(_tempClampPt) < dist - 0.5) {
-          this.lastCanSeeResult = false;
-          return false;
+    update(dt, player, onCatchPlayerCallback) {
+        // --- 1. AWAKENING GRACE PERIOD HANDLING ---
+        if (this.graceTimer > 0) {
+            this.graceTimer -= dt;
+            // Execute passive, non-lethal patrol routine while player wakes up
+            this.executePatrolStep(dt, this.speed * 0.6);
+            return;
         }
-      }
-    }
 
-    this.lastCanSeeResult = true;
-    return true;
-  },
+        // --- 2. SENSORY PERCEPTION SCAN ---
+        const seesTarget = this.canSeePlayer(player);
 
-  hearNoise(pos, radius) {
-    if (this.state === 'STUNNED' || GameState.isDying || !GameState.inGame) return;
-    const effectiveRadius = radius * this.hearingRadiusMod;
-    const dist = this.mesh.position.distanceTo(pos);
-
-    if (dist <= effectiveRadius) {
-      this.targetPos.copy(pos);
-      this.currentPath = NavGraph.findPath(this.mesh.position, pos);
-      this.state = 'INVESTIGATE';
-      audio.triggerTungSahurPattern();
-    }
-  },
-
-  stun(duration) {
-    this.state = 'STUNNED';
-    this.stunTimer = duration;
-    audio.stopChase();
-    audio.playTung();
-  },
-
-  update(dt) {
-    if (!this.mesh || GameState.isGP || !GameState.inGame || GameState.isDying) return;
-
-    this.animTime += dt;
-    if (this.rightArm) {
-      this.rightArm.rotation.x = -0.3 + Math.sin(this.animTime * (this.state === 'CHASE' ? 8 : 4)) * 0.35;
-    }
-    if (this.head) {
-      this.head.rotation.y = Math.sin(this.animTime * 2) * 0.15;
-    }
-
-    if (this.state === 'STUNNED') {
-      this.stunTimer -= dt;
-      this.mesh.rotation.z = 1.3;
-      if (this.stunTimer <= 0) {
-        this.mesh.rotation.z = 0;
-        this.state = 'PATROL';
-        this.pickNextPatrolNode();
-      }
-      return;
-    }
-
-    const canSee = this.hasLineOfSightToPlayer();
-
-    if (canSee) {
-      if (this.state !== 'CHASE') {
-        this.state = 'CHASE';
-        audio.startChase();
-      }
-      this.targetPos.copy(Player.position);
-      this.currentPath = [Player.position.clone()];
-    } else if (this.state === 'CHASE') {
-      this.state = 'SEARCH_LAST_SEEN';
-      audio.stopChase();
-      this.currentPath = NavGraph.findPath(this.mesh.position, this.targetPos);
-      this.searchTimer = 4.0;
-    }
-
-    let spd = (this.state === 'CHASE') ? this.chaseSpeed : this.speed;
-
-    if (this.currentPath.length > 0) {
-      const nextWaypoint = this.currentPath[0];
-      const dir = new THREE.Vector3().subVectors(nextWaypoint, this.mesh.position);
-      dir.y = 0;
-      const dist = dir.length();
-
-      if (dist < 0.8) {
-        this.currentPath.shift();
-        if (this.currentPath.length === 0) {
-          if (this.state === 'SEARCH_LAST_SEEN' || this.state === 'INVESTIGATE') {
-            this.state = 'LOOK_AROUND';
-            this.searchTimer = 3.5;
-          } else if (this.state === 'PATROL') {
-            this.pickNextPatrolNode();
-          }
+        if (seesTarget) {
+            this.state = "CHASE";
+            this.lastKnownPlayerPos.copy(player.position);
+            this.targetDestination.copy(player.position);
+            // Dynamic path directly to player when in LOS
+            this.recalculatePath(player.position);
+        } else if (this.state === "CHASE") {
+            // Lost direct Line-of-Sight -> Move to Last Known Position
+            this.state = "INVESTIGATE";
+            this.investigateWaitTime = 0.0;
+            this.recalculatePath(this.lastKnownPlayerPos);
         }
-      } else {
-        dir.normalize();
-        this.mesh.position.x += dir.x * spd * dt;
-        this.mesh.position.z += dir.z * spd * dt;
-        this.mesh.position.y = THREE.MathUtils.damp(this.mesh.position.y, nextWaypoint.y, 6, dt);
-        this.mesh.rotation.y = THREE.MathUtils.damp(this.mesh.rotation.y, Math.atan2(dir.x, dir.z), 8, dt);
-      }
-    } else if (this.state === 'LOOK_AROUND') {
-      this.searchTimer -= dt;
-      this.mesh.rotation.y += Math.sin(this.searchTimer * 2) * 0.03;
-      if (this.searchTimer <= 0) {
-        this.state = 'PATROL';
-        this.pickNextPatrolNode();
-      }
-    } else if (this.state === 'PATROL') {
-      this.pickNextPatrolNode();
-    }
 
-    const distToPlayer = this.mesh.position.distanceTo(Player.position);
-    if (distToPlayer < 1.5 && !Player.isHiding && !Player.isIntroPlaying && !Player.isGhost && this.state !== 'STUNNED') {
-      triggerJumpscare();
-    }
-  },
+        // --- 3. STATE MACHINE EXECUTION ---
+        const currentSpeed = (this.state === "CHASE") ? this.chaseSpeed : this.speed;
 
-  pickNextPatrolNode() {
-    this.patrolIdx = (this.patrolIdx + 1) % this.patrolNodes.length;
-    const nodeId = this.patrolNodes[this.patrolIdx];
-    const target = NavGraph.nodes[nodeId] || NavGraph.nodes['l_m1_hall'];
-    this.currentPath = NavGraph.findPath(this.mesh.position, target);
-  }
-};
+        switch (this.state) {
+            case "CHASE":
+            case "INVESTIGATE":
+                this.executePathTraversal(dt, currentSpeed, () => {
+                    // Reached destination
+                    if (this.state === "INVESTIGATE") {
+                        this.state = "SEARCH_LOOK_AROUND";
+                        this.investigateWaitTime = 4.0; // Spend 4 seconds searching
+                        this.lookAroundAngle = 0;
+                    }
+                });
+                break;
 
-// 9. INPUT & CONTROLLER WITH PAUSE MENU [M] KEY
-const Input = {
-  keys: {},
-  mouseSens: 0.0022,
-  invertY: 1,
-  touchMoveDir: new THREE.Vector2(),
+            case "SEARCH_LOOK_AROUND":
+                this.investigateWaitTime -= dt;
+                // Spin around and scan room
+                this.group.rotation.y += dt * 3.0;
+                if (this.investigateWaitTime <= 0) {
+                    this.state = "PATROL";
+                    this.advancePatrol();
+                }
+                break;
 
-  init(container, camera, scene) {
-    window.addEventListener('keydown', (e) => {
-      this.keys[e.code] = true;
-      if (e.code === 'KeyE') doInteract(camera);
-      if (e.code === 'KeyG') Inventory.dropCurrent(camera, scene);
-      if (e.code === 'KeyC') toggleCrouch();
-      if (e.code === 'KeyM') togglePauseMenu();
-      if (e.code === 'Enter') handleLobbyStartTrigger();
-      if (e.code === 'KeyL' && GameState.funMode) {
-        FunPhysics.spawnBouncyBall(scene, camera.position, new THREE.Vector3(0, 0, -1).applyEuler(Player.rotation));
-      }
-      if (e.code >= 'Digit1' && e.code <= 'Digit5') {
-        Inventory.selectSlot(parseInt(e.code.replace('Digit', '')) - 1);
-      }
-    });
-    window.addEventListener('keyup', (e) => { this.keys[e.code] = false; });
-
-    window.addEventListener('wheel', (e) => {
-      if (e.deltaY > 0) Inventory.selectSlot(Player.activeSlot + 1);
-      else if (e.deltaY < 0) Inventory.selectSlot(Player.activeSlot - 1);
-    });
-
-    window.addEventListener('mousedown', (e) => {
-      if (e.button === 0) {
-        Player.fireWeapon(camera);
-      }
-    });
-
-    window.addEventListener('mousemove', (e) => {
-      if (!GameState.isPaused) {
-        Player.rotation.y -= e.movementX * this.mouseSens;
-        Player.rotation.x -= e.movementY * this.mouseSens * this.invertY;
-        const maxPitch = Player.isHiding ? 0.5 : Math.PI * 0.45;
-        Player.rotation.x = Math.max(-maxPitch, Math.min(maxPitch, Player.rotation.x));
-      }
-    });
-
-    const clickFocus = document.getElementById('click-to-focus');
-    if (clickFocus) {
-      clickFocus.onclick = () => {
-        safeRequestPointerLock(container);
-      };
-    }
-
-    document.addEventListener('pointerlockchange', () => {
-      const isLocked = document.pointerLockElement === container || document.pointerLockElement === document.body;
-      const inGame = document.getElementById('hud').style.display === 'block';
-      const focusEl = document.getElementById('click-to-focus');
-      if (focusEl) {
-        focusEl.style.display =
-          (inGame && !isLocked && !document.getElementById('opt-mobile-mode').checked && !Player.isIntroPlaying && !GameState.isPaused) ? 'flex' : 'none';
-      }
-    });
-
-    for (let i = 0; i < 5; i++) {
-      document.getElementById(`slot-${i}`).onclick = () => Inventory.selectSlot(i);
-    }
-
-    this.setupTouchControls(camera, scene);
-  },
-
-  setupTouchControls(camera, scene) {
-    const bind = (zoneId, knobId, cb) => {
-      const zone = document.getElementById(zoneId);
-      const knob = document.getElementById(knobId);
-      let touchId = null, center = { x: 0, y: 0 };
-
-      zone.addEventListener('touchstart', (e) => {
-        e.preventDefault();
-        const t = e.changedTouches[0];
-        touchId = t.identifier;
-        const r = zone.getBoundingClientRect();
-        center = { x: r.left + r.width / 2, y: r.top + r.height / 2 };
-      }, { passive: false });
-
-      zone.addEventListener('touchmove', (e) => {
-        e.preventDefault();
-        for (let i = 0; i < e.changedTouches.length; i++) {
-          const t = e.changedTouches[i];
-          if (t.identifier === touchId) {
-            const dx = t.clientX - center.x;
-            const dy = t.clientY - center.y;
-            const dist = Math.min(45, Math.hypot(dx, dy));
-            const angle = Math.atan2(dy, dx);
-            const kx = Math.cos(angle) * dist;
-            const ky = Math.sin(angle) * dist;
-            knob.style.transform = `translate(calc(-50% + ${kx}px), calc(-50% + ${ky}px))`;
-            cb(kx / 45, ky / 45);
-          }
+            case "PATROL":
+            default:
+                this.executePatrolStep(dt, this.speed);
+                break;
         }
-      }, { passive: false });
 
-      const end = (e) => {
-        e.preventDefault();
-        touchId = null;
-        knob.style.transform = 'translate(-50%, -50%)';
-        cb(0, 0);
-      };
-      zone.addEventListener('touchend', end, { passive: false });
-      zone.addEventListener('touchcancel', end, { passive: false });
-    };
-
-    bind('touch-move', 'knob-move', (x, y) => { this.touchMoveDir.set(x, y); });
-    bind('touch-look', 'knob-look', (x, y) => {
-      Player.rotation.y -= x * 0.04;
-      Player.rotation.x -= y * 0.04 * this.invertY;
-      Player.rotation.x = Math.max(-Math.PI * 0.42, Math.min(Math.PI * 0.42, Player.rotation.x));
-    });
-
-    document.getElementById('m-btn-menu').onclick = togglePauseMenu;
-    document.getElementById('m-btn-use').onclick = () => doInteract(camera);
-    document.getElementById('m-btn-drop').onclick = () => Inventory.dropCurrent(camera, scene);
-    document.getElementById('m-btn-crouch').onclick = toggleCrouch;
-    document.getElementById('m-btn-fire').onclick = () => Player.fireWeapon(camera);
-
-    document.getElementById('m-btn-spawn').onclick = () => {
-      if (GameState.funMode) {
-        FunPhysics.spawnBouncyBall(scene, camera.position, new THREE.Vector3(0, 0, -1).applyEuler(Player.rotation));
-      }
-    };
-    document.getElementById('m-btn-up').onclick = () => { Player.velocity.y = 4.0; };
-    document.getElementById('m-btn-down').onclick = () => { Player.velocity.y = -4.0; };
-  }
-};
-
-function toggleCrouch() {
-  if (Player.isHiding) {
-    emergeFromHiding();
-    return;
-  }
-  Player.isCrouched = !Player.isCrouched;
-  const ind = document.getElementById('stealth-indicator');
-  ind.innerText = Player.isCrouched ? 'STEALTH: CROUCHED' : 'STEALTH: STANDING';
-}
-
-function emergeFromHiding() {
-  if (Player.hidingSpot && Player.hidingSpot.emergePosition) {
-    Player.position.copy(Player.hidingSpot.emergePosition);
-  }
-  Player.isHiding = false;
-  document.getElementById('stealth-indicator').innerText = 'STEALTH: STANDING';
-  document.getElementById('stealth-indicator').classList.remove('hidden');
-}
-
-// 22-ITEM LOCK & INTERACTION SOLVER
-function doInteract(camera) {
-  audio.init();
-  if (Player.isHiding) {
-    emergeFromHiding();
-    return;
-  }
-
-  const ray = new THREE.Raycaster();
-  ray.setFromCamera(new THREE.Vector2(0, 0), camera);
-  const meshes = House.interactables.map(o => o.mesh);
-  const hits = ray.intersectObjects(meshes, true);
-
-  if (hits.length > 0 && hits[0].distance < 3.2) {
-    const hitObj = hits[0].object;
-    const target = House.interactables.find(o => o.mesh === hitObj || o.mesh === hitObj.parent);
-    if (target) {
-      const msg = target.action(Inventory);
-      if (msg) showPrompt(msg);
-    }
-    return;
-  }
-
-  // Check Hiding Spots (Under Bed / Inside Wardrobe)
-  for (let i = 0; i < House.hidingSpots.length; i++) {
-    const spot = House.hidingSpots[i];
-    if (Player.position.distanceTo(spot.position) < 2.5) {
-      Player.isHiding = true;
-      Player.hidingSpot = spot;
-      document.getElementById('stealth-indicator').innerText = `STEALTH: UNDER ${spot.type.toUpperCase()}`;
-      document.getElementById('stealth-indicator').classList.add('hidden');
-      return;
-    }
-  }
-}
-
-function showPrompt(text) {
-  const p = document.getElementById('interaction-prompt');
-  p.innerText = text;
-  p.style.display = 'block';
-  clearTimeout(p._t);
-  p._t = setTimeout(() => { p.style.display = 'none'; }, 2400);
-}
-
-// 10. IN-GAME ACTION / PAUSE MENU ([M] OR MOBILE [MENU])
-function togglePauseMenu() {
-  const pMenu = document.getElementById('pause-menu-modal');
-  const isOpen = pMenu.style.display === 'flex';
-
-  if (isOpen) {
-    pMenu.style.display = 'none';
-    if (GameState.mode === 'sp') GameState.isPaused = false;
-    if (!document.getElementById('opt-mobile-mode').checked) {
-      safeRequestPointerLock(canvasContainer);
-    }
-  } else {
-    pMenu.style.display = 'flex';
-    try { document.exitPointerLock(); } catch(e){}
-    if (GameState.mode === 'sp') {
-      GameState.isPaused = true;
-      document.getElementById('pause-menu-title').innerText = 'PAUSED';
-      document.getElementById('pause-menu-sub').innerText = 'Singleplayer paused.';
-    } else {
-      GameState.isPaused = false;
-      document.getElementById('pause-menu-title').innerText = 'GAME MENU';
-      document.getElementById('pause-menu-sub').innerText = 'Multiplayer active in background (no pause).';
-    }
-  }
-}
-
-document.getElementById('btn-pause-resume').onclick = togglePauseMenu;
-document.getElementById('btn-pause-settings').onclick = () => {
-  document.getElementById('settings-modal').style.display = 'flex';
-};
-document.getElementById('btn-pause-stats').onclick = () => {
-  document.getElementById('settings-modal').style.display = 'flex';
-  document.getElementById('tab-btn-prof').click();
-};
-document.getElementById('btn-pause-exit').onclick = () => {
-  window.location.reload();
-};
-
-// 11. DAY PROGRESSION, JUMPSCARE & GAME OVER
-function triggerJumpscare() {
-  if (GameState.isDying || !GameState.inGame) return;
-  GameState.isDying = true;
-
-  MonsterAI.state = 'STUNNED';
-  audio.stopChase();
-  audio.playBatHit();
-  audio.playJumpscare();
-
-  const overlay = document.getElementById('jumpscare-overlay');
-  if (overlay) overlay.style.display = 'block';
-
-  setTimeout(() => {
-    if (overlay) overlay.style.display = 'none';
-    GameState.day++;
-    GameState.playerStats.deaths++;
-    CareerStats.save();
-
-    // SAFETY RESPAWN GUARD: Force Granny back to Level -1 Main Basement
-    MonsterAI.mesh.position.set(0.0, LEVEL_ELEVATIONS.LEVEL_MINUS_1 + 0.5, 1.0);
-    MonsterAI.state = 'PATROL';
-    MonsterAI.currentPath = [];
-
-    if (GameState.day > GameState.maxDays) {
-      showGameOverModal('The 5 days are up. Granny eliminated all survivors.');
-    } else {
-      respawnPlayer();
-    }
-  }, 1600);
-}
-
-function updateDayVignetteAndSpeed() {
-  const blood = document.getElementById('blood-vignette');
-  const opacities = [0, 0, 0.25, 0.45, 0.65, 0.88];
-  blood.style.opacity = opacities[GameState.day] || 0;
-
-  // Limp progression: Speed decreases each day
-  const speedMultipliers = [1, 1, 0.92, 0.84, 0.76, 0.68];
-  Player.limpMultiplier = speedMultipliers[GameState.day] || 1;
-}
-
-function respawnPlayer() {
-  Player.health = 100;
-  document.getElementById('health-bar-fill').style.width = '100%';
-  GameState.isDying = false;
-
-  MonsterAI.mesh.position.set(0.0, LEVEL_ELEVATIONS.LEVEL_MINUS_1 + 0.5, 1.0);
-  MonsterAI.state = 'PATROL';
-  MonsterAI.currentPath = [];
-
-  showDaySequence();
-}
-
-function showDaySequence() {
-  document.getElementById('hud').style.display = 'none';
-  document.getElementById('mobile-controls').style.display = 'none';
-  document.getElementById('click-to-focus').style.display = 'none';
-
-  const splash = document.getElementById('day-splash');
-  splash.style.transition = 'none';
-  splash.style.display = 'flex';
-  splash.style.opacity = '1';
-
-  document.getElementById('day-title').innerText = `DAY ${GameState.day}`;
-  document.getElementById('day-subtitle').innerText =
-    GameState.day === 1 ? 'Find a way out before she catches you.' :
-    GameState.day === 5 ? 'DAY 5, no escape...' :
-    'You woke up with a pounding headache.';
-
-  updateDayVignetteAndSpeed();
-  Player.prepareBedPose(camera);
-
-  setTimeout(() => {
-    splash.style.transition = 'opacity 1.0s ease';
-    splash.style.opacity = '0';
-
-    setTimeout(() => {
-      splash.style.display = 'none';
-      Player.startWakeUpIntro();
-    }, 1000);
-  }, 2200);
-}
-
-function triggerVictory(method) {
-  GameState.playerStats.escapes++;
-  CareerStats.save();
-  alert(`VICTORY! ${method}`);
-  window.location.reload();
-}
-
-function showGameOverModal(reason) {
-  document.getElementById('game-over-modal').style.display = 'flex';
-  document.getElementById('game-over-reason').innerText = reason;
-  updateVoteUI();
-}
-
-function updateVoteUI() {
-  const total = Object.keys(NetworkEngine.peers).length + 1;
-  document.getElementById('vote-count').innerText = GameState.restartVotes;
-  document.getElementById('vote-required').innerText = total;
-
-  if (GameState.restartVotes >= total) {
-    document.getElementById('game-over-modal').style.display = 'none';
-    GameState.day = 1;
-    GameState.restartVotes = 0;
-    respawnPlayer();
-  }
-}
-
-document.getElementById('btn-vote-restart').onclick = () => {
-  GameState.restartVotes++;
-  NetworkEngine.broadcast('VOTE_RESTART', { count: GameState.restartVotes });
-  updateVoteUI();
-};
-document.getElementById('btn-leave-lobby').onclick = () => {
-  window.location.reload();
-};
-
-// 12. HOST LAPTOP TERMINAL
-function openHostLaptopTerminal() {
-  const modal = document.getElementById('laptop-modal');
-  modal.style.display = 'flex';
-
-  const table = document.getElementById('laptop-player-table');
-  table.innerHTML = `<div><b>${document.getElementById('prof-name').value} (Host)</b> - Stats: Escapes ${GameState.playerStats.escapes} | Deaths ${GameState.playerStats.deaths}</div>`;
-
-  Object.values(NetworkEngine.peers).forEach((p, idx) => {
-    table.innerHTML += `<div><b>${p.name || 'Survivor ' + (idx + 1)}</b> - Connected (Ping: 42ms)</div>`;
-  });
-}
-document.getElementById('btn-close-laptop').onclick = () => {
-  document.getElementById('laptop-modal').style.display = 'none';
-};
-
-// 13. 3D LOBBY START COUNTDOWN (AUTO-RESETS ON JOIN/LEAVE)
-let lobbyCountdownTimer = null;
-let lobbyCountdownVal = 10;
-
-function handleLobbyStartTrigger() {
-  if (!NetworkEngine.isHost || GameState.inGame) return;
-  if (lobbyCountdownTimer) return;
-
-  lobbyCountdownVal = 10;
-  const banner = document.getElementById('lobby-countdown-banner');
-  banner.style.display = 'block';
-  document.getElementById('lobby-countdown-num').innerText = lobbyCountdownVal;
-
-  NetworkEngine.broadcast('LOBBY_COUNTDOWN_START', { val: 10 });
-
-  lobbyCountdownTimer = setInterval(() => {
-    lobbyCountdownVal--;
-    document.getElementById('lobby-countdown-num').innerText = lobbyCountdownVal;
-
-    if (lobbyCountdownVal <= 0) {
-      clearInterval(lobbyCountdownTimer);
-      lobbyCountdownTimer = null;
-      banner.style.display = 'none';
-      NetworkEngine.broadcast('HOST_LAUNCH_MANOR', {});
-      launchManorGame();
-    }
-  }, 1000);
-}
-
-function cancelLobbyCountdown() {
-  if (lobbyCountdownTimer) {
-    clearInterval(lobbyCountdownTimer);
-    lobbyCountdownTimer = null;
-    document.getElementById('lobby-countdown-banner').style.display = 'none';
-    showPrompt('Player joined/left! Start countdown canceled.');
-  }
-}
-
-// 14. MULTIPLAYER NETWORKING & GP MODE SYNCHRONIZATION
-const NetworkEngine = {
-  client: null,
-  isHost: false,
-  myId: 'survivor_' + Math.random().toString(36).substring(2, 9),
-  roomCode: '',
-  roomName: '',
-  maxPlayers: 8,
-  peers: {},
-
-  init(scene) {
-    const pill = document.getElementById('net-status-pill');
-    try {
-      this.client = new Paho.MQTT.Client('broker.hivemq.com', 8884, this.myId);
-      this.client.onConnectionLost = () => {
-        pill.innerText = 'STATUS: RECONNECTING TO CLUSTER...';
-        pill.style.color = '#ffaa00';
-        setTimeout(() => this.init(scene), 3000);
-      };
-      this.client.onMessageArrived = (msg) => {
-        this.handlePacket(scene, msg.destinationName, JSON.parse(msg.payloadString));
-      };
-      this.client.connect({
-        useSSL: true,
-        timeout: 6,
-        onSuccess: () => {
-          pill.innerText = '● CONNECTED TO GLOBAL MULTIPLAYER (Live Across Devices)';
-          pill.style.color = '#00ffaa';
-          this.client.subscribe('granny_v5_lobbies/#');
+        // --- 4. KILL HITBOX TRIGGER ---
+        if (this.state === "CHASE") {
+            const hitDist = this.group.position.distanceTo(player.position);
+            const verticalDist = Math.abs(this.group.position.y - player.position.y);
+            if (hitDist < 1.7 && verticalDist < 1.8) {
+                if (onCatchPlayerCallback) {
+                    onCatchPlayerCallback();
+                }
+            }
         }
-      });
-    } catch (e) {}
-  },
-
-  broadcast(topic, data) {
-    if (this.client && this.client.isConnected()) {
-      const msg = new Paho.MQTT.Message(JSON.stringify(data));
-      msg.destinationName = topic;
-      this.client.send(msg);
     }
-  },
 
-  broadcastKill(targetId) {
-    this.broadcast(`granny_v5_room/${this.roomCode}`, {
-      type: 'PLAYER_KILLED',
-      target: targetId,
-      corpsePos: Player.position
-    });
-  },
-
-  handlePacket(scene, topic, data) {
-    if (data.sender === this.myId) return;
-
-    if (topic === 'granny_v5_lobbies/announce') {
-      renderLobbyCard(data);
-    } else if (topic === 'granny_v5_lobbies/query' && this.isHost) {
-      this.announce();
-    } else if (topic === `granny_v5_room/${this.roomCode}`) {
-      if (data.type === 'JOIN') {
-        cancelLobbyCountdown();
-        this.peers[data.sender] = { name: data.name, wardrobe: data.wardrobe, pos: new THREE.Vector3() };
-        updateVoteUI();
-        if (this.isHost) this.announce();
-      } else if (data.type === 'LEAVE') {
-        cancelLobbyCountdown();
-        delete this.peers[data.sender];
-        updateVoteUI();
-      } else if (data.type === 'LOBBY_COUNTDOWN_START') {
-        const b = document.getElementById('lobby-countdown-banner');
-        b.style.display = 'block';
-        document.getElementById('lobby-countdown-num').innerText = data.val;
-      } else if (data.type === 'HOST_LAUNCH_MANOR') {
-        launchManorGame();
-      } else if (data.type === 'SYNC') {
-        this.updateRemoteSurvivor(scene, data.sender, data);
-      } else if (data.type === 'PLAYER_KILLED') {
-        if (data.target === this.myId) {
-          Player.becomeGhost(data.corpsePos);
-          audio.playBatHit();
+    executePatrolStep(dt, speed) {
+        if (this.currentPath.length === 0 || this.pathIndex >= this.currentPath.length) {
+            this.advancePatrol();
         }
-      } else if (data.type === 'VOTE_RESTART') {
-        GameState.restartVotes = data.count;
-        updateVoteUI();
-      }
-    }
-  },
-
-  announce() {
-    this.broadcast('granny_v5_lobbies/announce', {
-      code: this.roomCode,
-      name: this.roomName,
-      count: Object.keys(this.peers).length + 1,
-      max: this.maxPlayers
-    });
-  },
-
-  updateRemoteSurvivor(scene, id, data) {
-    if (!this.peers[id] || !this.peers[id].mesh) {
-      const g = new THREE.Group();
-      const bodyMat = new THREE.MeshStandardMaterial({ color: data.wardrobe ? data.wardrobe.shirt : 0x335577 });
-      const body = new THREE.Mesh(new THREE.CylinderGeometry(0.3, 0.3, 1.1, 8), bodyMat);
-      body.position.y = 0.9;
-      g.add(body);
-
-      const headMat = new THREE.MeshStandardMaterial({ color: data.wardrobe ? data.wardrobe.skin : 0xd8b28a });
-      const head = new THREE.Mesh(new THREE.SphereGeometry(0.24, 8, 8), headMat);
-      head.position.y = 1.65;
-      g.add(head);
-
-      const nameSprite = createNameplate(data.name || 'Survivor');
-      nameSprite.position.y = 2.15;
-      g.add(nameSprite);
-
-      scene.add(g);
-      this.peers[id] = { mesh: g, name: data.name, isGhost: false };
-    }
-
-    const p = this.peers[id];
-    if (p.mesh) {
-      if (data.isGhost) {
-        p.mesh.visible = false;
-        return;
-      }
-      p.mesh.position.set(data.x, data.y, data.z);
-      p.mesh.rotation.y = data.rotY;
-
-      if (Player.position.distanceTo(p.mesh.position) < 0.8 && !Player.isGhost) {
-        const push = new THREE.Vector3().subVectors(Player.position, p.mesh.position).normalize().multiplyScalar(0.08);
-        Player.position.add(push);
-      }
-    }
-  },
-
-  tickSync() {
-    if (this.roomCode) {
-      this.broadcast(`granny_v5_room/${this.roomCode}`, {
-        type: 'SYNC',
-        sender: this.myId,
-        name: document.getElementById('prof-name').value,
-        x: Player.position.x,
-        y: Player.position.y,
-        z: Player.position.z,
-        rotY: Player.rotation.y,
-        isGhost: Player.isGhost,
-        wardrobe: {
-          shirt: document.getElementById('wardrobe-shirt').value,
-          skin: document.getElementById('wardrobe-skin').value
-        }
-      });
-    }
-  }
-};
-
-function createNameplate(text) {
-  const c = document.createElement('canvas'); c.width = 256; c.height = 64;
-  const ctx = c.getContext('2d');
-  ctx.fillStyle = 'rgba(0,0,0,0.6)'; ctx.fillRect(0, 0, 256, 64);
-  ctx.fillStyle = '#ffffff'; ctx.font = 'bold 24px monospace'; ctx.textAlign = 'center';
-  ctx.fillText(text, 128, 42);
-  const tex = new THREE.CanvasTexture(c);
-  return new THREE.Sprite(new THREE.SpriteMaterial({ map: tex }));
-}
-
-function spawnDeadCorpseMesh(scene, pos) {
-  const corpse = new THREE.Group();
-  const cMat = new THREE.MeshStandardMaterial({ color: 0x444444 });
-  const body = new THREE.Mesh(new THREE.BoxGeometry(0.5, 0.25, 1.4), cMat);
-  body.position.y = 0.12;
-  corpse.add(body);
-  const head = new THREE.Mesh(new THREE.SphereGeometry(0.2, 8, 8), Assets.skinMat);
-  head.position.set(0, 0.15, 0.85);
-  corpse.add(head);
-  corpse.position.copy(pos);
-  scene.add(corpse);
-}
-
-// 15. GAME LAUNCH & GP SELECTION
-function launchManorGame() {
-  GameState.inGame = true;
-  document.getElementById('main-menu').style.display = 'none';
-
-  const total = Object.keys(NetworkEngine.peers).length + 1;
-  if (total >= 5 && document.getElementById('mp-enable-gp').checked) {
-    const allIds = [NetworkEngine.myId, ...Object.keys(NetworkEngine.peers)];
-    const chosenGP = allIds[Math.floor(Math.random() * allIds.length)];
-    if (chosenGP === NetworkEngine.myId) {
-      setupAsGrannyPlayer();
-      return;
-    }
-  }
-
-  document.getElementById('role-badge').style.display = 'block';
-  document.getElementById('role-badge').innerText = 'ROLE: SURVIVOR';
-
-  showDaySequence();
-}
-
-function setupAsGrannyPlayer() {
-  GameState.isGP = true;
-  document.getElementById('role-badge').style.display = 'block';
-  document.getElementById('role-badge').innerText = 'ROLE: GRANNY (HUNTER)';
-  document.getElementById('role-badge').style.background = '#8a0303';
-
-  const napOverlay = document.getElementById('gp-nap-overlay');
-  napOverlay.style.display = 'flex';
-  let napSecs = 10;
-  document.getElementById('gp-countdown-timer').innerText = napSecs;
-
-  const napInterval = setInterval(() => {
-    napSecs--;
-    document.getElementById('gp-countdown-timer').innerText = napSecs;
-    if (napSecs <= 0) {
-      clearInterval(napInterval);
-      napOverlay.style.display = 'none';
-
-      Player.position.set(-11.0, LEVEL_ELEVATIONS.LEVEL_MINUS_2 + 1.0, -4.0); // Spawns in Garage
-      Viewmodel.setHeldItem('GP_Bat');
-      document.getElementById('hud').style.display = 'block';
-      showPrompt('You woke up! Hunt down survivors with [LMB / FIRE]!');
-    }
-  }, 1000);
-}
-
-// 16. SETTINGS CONTROLLER (LIVE FPS & UI SCALE SLIDERS)
-const SettingsEngine = {
-  init(renderer, camera, scene) {
-    const fpsSlider = document.getElementById('opt-fps-slider');
-    fpsSlider.oninput = (e) => {
-      const v = parseInt(e.target.value);
-      EngineLimiter.targetFPS = v;
-      EngineLimiter.frameInterval = 1000 / v;
-      document.getElementById('opt-fps-val').innerText = `${v} FPS`;
-    };
-
-    const uiSlider = document.getElementById('opt-uiscale');
-    uiSlider.oninput = (e) => {
-      const scale = parseFloat(e.target.value);
-      document.documentElement.style.setProperty('--ui-scale', scale);
-      document.getElementById('opt-uiscale-val').innerText = `${Math.round(scale * 100)}%`;
-    };
-
-    const fovEl = document.getElementById('opt-fov');
-    fovEl.oninput = (e) => {
-      camera.fov = parseFloat(e.target.value);
-      camera.updateProjectionMatrix();
-      document.getElementById('opt-fov-val').innerText = `${e.target.value}°`;
-    };
-
-    const gammaEl = document.getElementById('opt-gamma');
-    gammaEl.oninput = (e) => {
-      const v = parseFloat(e.target.value);
-      ambLight.intensity = 0.45 * v;
-      document.getElementById('opt-gamma-val').innerText = `${v.toFixed(1)}`;
-    };
-
-    const resEl = document.getElementById('opt-res');
-    resEl.oninput = (e) => {
-      renderer.setPixelRatio(Math.min(window.devicePixelRatio, parseFloat(e.target.value)));
-      document.getElementById('opt-res-val').innerText = `${e.target.value}x`;
-    };
-
-    const fogEl = document.getElementById('opt-fog');
-    fogEl.onchange = (e) => {
-      const v = e.target.value;
-      if (v === 'none') scene.fog.near = 999;
-      else if (v === 'light') { scene.fog.near = 25; scene.fog.far = 80; }
-      else if (v === 'normal') { scene.fog.near = 15; scene.fog.far = 65; }
-      else if (v === 'heavy') { scene.fog.near = 6; scene.fog.far = 28; }
-    };
-
-    const sensEl = document.getElementById('opt-sens');
-    sensEl.oninput = (e) => {
-      Input.mouseSens = 0.0022 * parseFloat(e.target.value);
-      document.getElementById('opt-sens-val').innerText = `${e.target.value}`;
-    };
-
-    document.getElementById('opt-inverty').onchange = (e) => {
-      Input.invertY = e.target.checked ? -1 : 1;
-    };
-
-    document.getElementById('opt-crosshair').onchange = (e) => {
-      document.getElementById('crosshair').className = e.target.value;
-    };
-
-    document.getElementById('opt-mobile-mode').onchange = (e) => {
-      const inGame = document.getElementById('hud').style.display === 'block';
-      if (inGame) {
-        document.getElementById('mobile-controls').style.display = e.target.checked ? 'block' : 'none';
-        if (!e.target.checked) document.getElementById('click-to-focus').style.display = 'flex';
-      }
-    };
-
-    const updateVols = () => {
-      const m = parseFloat(document.getElementById('opt-vol-master').value);
-      const s = parseFloat(document.getElementById('opt-vol-sfx').value);
-      const mu = parseFloat(document.getElementById('opt-vol-music').value);
-      audio.setVolumes(m, s, mu);
-    };
-    document.getElementById('opt-vol-master').oninput = updateVols;
-    document.getElementById('opt-vol-sfx').oninput = updateVols;
-    document.getElementById('opt-vol-music').oninput = updateVols;
-
-    ['gfx', 'ctrl', 'audio', 'prof'].forEach(tab => {
-      document.getElementById(`tab-btn-${tab}`).onclick = () => {
-        ['gfx', 'ctrl', 'audio', 'prof'].forEach(t => {
-          document.getElementById(`tab-btn-${t}`).classList.toggle('active', t === tab);
-          document.getElementById(`tab-${t}`).style.display = (t === tab) ? 'block' : 'none';
+        this.executePathTraversal(dt, speed, () => {
+            this.advancePatrol();
         });
-      };
-    });
-  }
-};
-
-// 17. RUNTIME INITIALIZATION & HORROR-BALANCED LIGHTING
-const GameState = {
-  mode: 'sp',
-  difficulty: 'normal',
-  day: 1,
-  maxDays: 5,
-  inGame: false,
-  isGP: false,
-  funMode: false,
-  isPaused: false,
-  isDying: false,
-  restartVotes: 0,
-  playerStats: { escapes: 0, deaths: 0, stuns: 0, days: 0 }
-};
-
-const EngineLimiter = {
-  targetFPS: 120,
-  frameInterval: 1000 / 120,
-  lastFrameTime: performance.now()
-};
-
-const canvasContainer = document.getElementById('canvas-container');
-const scene = new THREE.Scene();
-scene.background = new THREE.Color(0x1a1614);
-scene.fog = new THREE.Fog(0x1a1614, 15, 65);
-
-const camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 90);
-scene.add(camera);
-
-const renderer = new THREE.WebGLRenderer({ antialias: false, powerPreference: 'high-performance' });
-renderer.setSize(window.innerWidth, window.innerHeight);
-renderer.setPixelRatio(Math.min(window.devicePixelRatio, 1.5));
-canvasContainer.appendChild(renderer.domElement);
-
-// Balanced Ambient Light
-const ambLight = new THREE.AmbientLight(0xffeedd, 0.45);
-scene.add(ambLight);
-
-// Overhead Directional Moon Fill
-const sunLight = new THREE.DirectionalLight(0xffeedd, 0.35);
-sunLight.position.set(0, 20, 0);
-scene.add(sunLight);
-
-// Point Lamps in Manor
-const bedroomLamp = new THREE.PointLight(0xffb055, 1.5, 16);
-bedroomLamp.position.set(-8, LEVEL_ELEVATIONS.LEVEL_1 + 4.5, 8);
-scene.add(bedroomLamp);
-
-const foyerLamp = new THREE.PointLight(0xffdd99, 1.5, 18);
-foyerLamp.position.set(0, 4.2, 8);
-scene.add(foyerLamp);
-
-const basementLight = new THREE.PointLight(0x66cc88, 1.2, 14);
-basementLight.position.set(-4, LEVEL_ELEVATIONS.LEVEL_MINUS_1 + 3.0, -4);
-scene.add(basementLight);
-
-// Build Level Map, Player Controller & AI
-House.build(scene);
-Player.init(camera, scene);
-MonsterAI.init(scene);
-Input.init(canvasContainer, camera, scene);
-NetworkEngine.init(scene);
-SettingsEngine.init(renderer, camera, scene);
-CareerStats.load();
-
-const showScreen = (id) => {
-  ['main-menu', 'sp-modal', 'mp-modal', 'wardrobe-modal', 'settings-modal', 'pause-menu-modal'].forEach(s => {
-    document.getElementById(s).style.display = (s === id) ? 'flex' : 'none';
-  });
-};
-
-document.getElementById('btn-singleplayer').onclick = () => showScreen('sp-modal');
-document.getElementById('btn-multiplayer').onclick = () => {
-  showScreen('mp-modal');
-  document.getElementById('mp-lobby-browser').style.display = 'block';
-  document.getElementById('mp-create-box').style.display = 'none';
-  document.getElementById('row-mp-back').style.display = 'flex';
-};
-document.getElementById('btn-wardrobe').onclick = () => showScreen('wardrobe-modal');
-document.getElementById('btn-settings').onclick = () => showScreen('settings-modal');
-
-document.getElementById('sp-back').onclick = () => showScreen('main-menu');
-document.getElementById('btn-mp-back').onclick = () => showScreen('main-menu');
-document.getElementById('wardrobe-back').onclick = () => showScreen('main-menu');
-document.getElementById('settings-back').onclick = () => {
-  if (GameState.inGame) {
-    document.getElementById('settings-modal').style.display = 'none';
-  } else {
-    showScreen('main-menu');
-  }
-};
-
-document.getElementById('sp-start').onclick = () => {
-  GameState.mode = 'sp';
-  GameState.inGame = true;
-  GameState.isDying = false;
-  GameState.difficulty = document.getElementById('sp-diff').value;
-  GameState.funMode = document.getElementById('sp-funmode').checked;
-
-  if (GameState.funMode) {
-    document.body.classList.add('fun-mode-active');
-    document.getElementById('m-btn-spawn').style.display = 'flex';
-    document.getElementById('m-btn-up').style.display = 'flex';
-    document.getElementById('m-btn-down').style.display = 'flex';
-  } else {
-    document.body.classList.remove('fun-mode-active');
-    document.getElementById('m-btn-spawn').style.display = 'none';
-    document.getElementById('m-btn-up').style.display = 'none';
-    document.getElementById('m-btn-down').style.display = 'none';
-  }
-
-  MonsterAI.applyDifficultySettings();
-  audio.init();
-  showScreen('');
-  showDaySequence();
-};
-
-// MULTIPLAYER "+ CREATE" TOGGLE HANDLERS
-document.getElementById('btn-show-create-lobby').onclick = () => {
-  document.getElementById('mp-lobby-browser').style.display = 'none';
-  document.getElementById('mp-create-box').style.display = 'block';
-  document.getElementById('row-mp-back').style.display = 'none';
-};
-
-document.getElementById('btn-cancel-create').onclick = () => {
-  document.getElementById('mp-create-box').style.display = 'none';
-  document.getElementById('mp-lobby-browser').style.display = 'block';
-  document.getElementById('row-mp-back').style.display = 'flex';
-};
-
-document.getElementById('mp-max-players').oninput = (e) => {
-  const v = parseInt(e.target.value);
-  document.getElementById('mp-max-players-val').innerText = v;
-  const is5OrMore = v >= 5;
-  document.getElementById('row-player-granny').style.display = is5OrMore ? 'flex' : 'none';
-  document.getElementById('row-funmode').style.display = is5OrMore ? 'flex' : 'none';
-  if (!is5OrMore) {
-    document.getElementById('mp-enable-gp').checked = false;
-    document.getElementById('mp-funmode').checked = false;
-  }
-};
-
-document.getElementById('btn-commit-create-lobby').onclick = () => {
-  NetworkEngine.isHost = true;
-  NetworkEngine.roomCode = 'SAH-' + Math.floor(10 + Math.random() * 89);
-  NetworkEngine.roomName = document.getElementById('mp-room-name').value.trim();
-  NetworkEngine.maxPlayers = parseInt(document.getElementById('mp-max-players').value);
-
-  GameState.mode = 'mp';
-  GameState.inGame = false;
-  GameState.isDying = false;
-  GameState.difficulty = document.getElementById('mp-diff').value;
-  MonsterAI.applyDifficultySettings();
-
-  GameState.funMode = document.getElementById('mp-funmode').checked || (NetworkEngine.roomName.toUpperCase() === 'FUN TIME');
-  if (GameState.funMode) {
-    document.body.classList.add('fun-mode-active');
-    document.getElementById('m-btn-spawn').style.display = 'flex';
-    document.getElementById('m-btn-up').style.display = 'flex';
-    document.getElementById('m-btn-down').style.display = 'flex';
-  } else {
-    document.body.classList.remove('fun-mode-active');
-    document.getElementById('m-btn-spawn').style.display = 'none';
-    document.getElementById('m-btn-up').style.display = 'none';
-    document.getElementById('m-btn-down').style.display = 'none';
-  }
-
-  showScreen('');
-
-  try {
-    if (NetworkEngine.client && NetworkEngine.client.isConnected()) {
-      NetworkEngine.client.subscribe(`granny_v5_room/${NetworkEngine.roomCode}`);
-      NetworkEngine.announce();
     }
-  } catch (err) {}
 
-  Player.position.set(60.0, 30.0, 2.0); // Spawns Host inside 3D Lobby
-  document.getElementById('hud').style.display = 'block';
-  showPrompt('Spawned in 3D Lobby! Press [Enter] to start, or [E] on laptop for settings.');
-};
+    advancePatrol() {
+        this.patrolIndex = (this.patrolIndex + 1) % this.patrolCycle.length;
+        const targetNodeId = this.patrolCycle[this.patrolIndex];
+        const node = this.nav.nodes.get(targetNodeId);
+        if (node) {
+            this.recalculatePath(node.pos);
+        }
+    }
 
-document.getElementById('btn-sync-lobbies').onclick = () => {
-  document.getElementById('lobbies-list').innerHTML = '<div style="color:#aaa;">Scanning for active lobbies...</div>';
-  NetworkEngine.broadcast('granny_v5_lobbies/query', { sender: NetworkEngine.myId });
-};
+    executePathTraversal(dt, moveSpeed, onReachDestination) {
+        if (this.pathIndex >= this.currentPath.length) {
+            if (onReachDestination) onReachDestination();
+            return;
+        }
 
-document.getElementById('btn-join-code').onclick = () => {
-  const code = document.getElementById('mp-direct-code').value.trim().toUpperCase();
-  if (code.length >= 4) {
-    NetworkEngine.roomCode = code;
-    showScreen('');
+        const nextPoint = this.currentPath[this.pathIndex];
+        const flatAiPos = new THREE.Vector3(this.group.position.x, 0, this.group.position.z);
+        const flatTargetPos = new THREE.Vector3(nextPoint.x, 0, nextPoint.z);
+        const distanceToWaypoint = flatAiPos.distanceTo(flatTargetPos);
 
-    try {
-      if (NetworkEngine.client && NetworkEngine.client.isConnected()) {
-        NetworkEngine.client.subscribe(`granny_v5_room/${code}`);
-        NetworkEngine.broadcast(`granny_v5_room/${code}`, {
-          type: 'JOIN',
-          sender: NetworkEngine.myId,
-          name: document.getElementById('prof-name').value,
-          wardrobe: {
-            shirt: document.getElementById('wardrobe-shirt').value,
-            skin: document.getElementById('wardrobe-skin').value
-          }
-        });
-      }
-    } catch (err) {}
+        // Check if waypoint reached
+        if (distanceToWaypoint < 0.45) {
+            this.pathIndex++;
+            if (this.pathIndex >= this.currentPath.length) {
+                if (onReachDestination) onReachDestination();
+                return;
+            }
+        }
 
-    Player.position.set(60.0, 30.0, 2.0);
-    document.getElementById('hud').style.display = 'block';
-    showPrompt('Entered 3D Waiting Room! Waiting for host to start...');
-  }
-};
+        // Compute step velocity
+        const moveDir = new THREE.Vector3()
+            .subVectors(nextPoint, this.group.position);
+        
+        // Handle vertical staircase/ramp transition
+        const yDiff = moveDir.y;
+        moveDir.y = 0;
+        moveDir.normalize();
 
-function renderLobbyCard(data) {
-  const list = document.getElementById('lobbies-list');
-  if (list.querySelector(`[data-code="${data.code}"]`)) return;
-  if (list.innerText.includes('Scanning') || list.innerText.includes('Click SYNC')) {
-    list.innerHTML = '';
-  }
+        const step = moveDir.multiplyScalar(moveSpeed * dt);
+        // Vertical step interpolation
+        step.y = THREE.MathUtils.clamp(yDiff * 5.0 * dt, -0.4, 0.4);
 
-  const div = document.createElement('div');
-  div.setAttribute('data-code', data.code);
-  div.style.cssText = 'padding:7px; border-bottom:1px solid #333; display:flex; justify-content:space-between; align-items:center;';
-  div.innerHTML = `
-    <span><b>${data.name}</b> [${data.code}] (${data.count}/${data.max})</span>
-    <button class="menu-btn small">JOIN</button>
-  `;
+        // Rotate facing direction smoothly
+        const targetAngle = Math.atan2(moveDir.x, moveDir.z);
+        this.group.rotation.y = THREE.MathUtils.lerp(this.group.rotation.y, targetAngle, 10.0 * dt);
 
-  div.querySelector('button').onclick = () => {
-    NetworkEngine.roomCode = data.code;
-    showScreen('');
-    try {
-      if (NetworkEngine.client && NetworkEngine.client.isConnected()) {
-        NetworkEngine.client.subscribe(`granny_v5_room/${data.code}`);
-        NetworkEngine.broadcast(`granny_v5_room/${data.code}`, {
-          type: 'JOIN',
-          sender: NetworkEngine.myId,
-          name: document.getElementById('prof-name').value,
-          wardrobe: {
-            shirt: document.getElementById('wardrobe-shirt').value,
-            skin: document.getElementById('wardrobe-skin').value
-          }
-        });
-      }
-    } catch (err) {}
-    Player.position.set(60.0, 30.0, 2.0);
-    document.getElementById('hud').style.display = 'block';
-  };
-
-  list.appendChild(div);
+        // Apply swept collision movement
+        this.moveWithAABBCollision(step);
+    }
 }
-
-// 18. THROTTLED 1-1200 FPS ENGINE LOOP
-setInterval(() => { NetworkEngine.tickSync(); }, 50);
-
-function gameLoop() {
-  requestAnimationFrame(gameLoop);
-
-  const now = performance.now();
-  const elapsed = now - EngineLimiter.lastFrameTime;
-
-  if (elapsed < EngineLimiter.frameInterval) return;
-  EngineLimiter.lastFrameTime = now - (elapsed % EngineLimiter.frameInterval);
-
-  const dt = GameState.isPaused ? 0 : Math.min(elapsed / 1000, 0.05);
-
-  if (!GameState.isPaused) {
-    Player.update(dt, camera);
-    MonsterAI.update(dt);
-    updatePhysicsAndWorld(dt);
-  }
-
-  renderer.render(scene, camera);
-}
-
-window.addEventListener('resize', () => {
-  camera.aspect = window.innerWidth / window.innerHeight;
-  camera.updateProjectionMatrix();
-  renderer.setSize(window.innerWidth, window.innerHeight);
-});
-
-gameLoop();
