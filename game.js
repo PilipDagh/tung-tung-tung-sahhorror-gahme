@@ -1,12 +1,13 @@
 /* =========================================================================
-   GAME.JS - COMPLETE CONTROLLER, NAVGRAPH, PAUSE MENU, LIGHTING & AI
+   GAME.JS - 5-TIER COMPLETE CONTROLLER, 22-ITEM ESCAPE CHAINS,
+   NAVMESH AI, GP MODE, GHOST FLIGHT, 3D LOBBY & 1-1200 FPS ENGINE LOOP
    ========================================================================= */
 
 const _tempVecA = new THREE.Vector3();
 const _tempRayOrigin = new THREE.Vector3();
 const _tempClampPt = new THREE.Vector3();
 
-// Safe Pointer Lock helper that never crashes on iPad, mobile, or unsupported browsers
+// Safe Pointer Lock helper that avoids crashes on mobile/iPad/WebKit
 function safeRequestPointerLock(el) {
   try {
     if (el && typeof el.requestPointerLock === 'function') {
@@ -14,55 +15,97 @@ function safeRequestPointerLock(el) {
     } else if (document.body && typeof document.body.requestPointerLock === 'function') {
       document.body.requestPointerLock();
     }
-  } catch (err) {
-    // Gracefully ignore if touch device / unsupported
-  }
+  } catch (err) {}
 }
 
-// 1. WAYPOINT GRAPH FOR GRANNY NAVIGATION
+// 1. 5-TIER WAYPOINT GRAPH (LEVELS -2 TO 2) FOR TUNG TUNG SAHUR AI
 const NavGraph = {
   nodes: {
-    'bed_start': new THREE.Vector3(-8.5, 6.0, 8.5),
-    'door_start': new THREE.Vector3(-5.5, 6.0, 2.5),
-    'hall_mid': new THREE.Vector3(-2.0, 6.0, 2.5),
-    'hall_east': new THREE.Vector3(4.0, 6.0, 2.5),
-    'stairs_top': new THREE.Vector3(5.0, 6.0, 4.5),
-    'stairs_mid': new THREE.Vector3(5.0, 3.0, 8.5),
-    'stairs_bottom': new THREE.Vector3(5.0, 0.2, 13.5),
-    'foyer': new THREE.Vector3(0.0, 0.2, 12.0),
-    'front_door': new THREE.Vector3(0.0, 0.2, 16.0),
-    'living_room': new THREE.Vector3(-8.0, 0.2, 8.0),
-    'dining_room': new THREE.Vector3(-8.0, 0.2, -2.0),
-    'kitchen': new THREE.Vector3(8.0, 0.2, -6.0),
-    'stairs_down_top': new THREE.Vector3(-5.0, 0.2, -1.5),
-    'stairs_down_mid': new THREE.Vector3(-5.0, -3.0, -6.0),
-    'stairs_down_bot': new THREE.Vector3(-5.0, -5.8, -10.5),
-    'garage_main': new THREE.Vector3(-7.0, -5.8, -6.0),
-    'garage_east': new THREE.Vector3(4.0, -5.8, -6.0)
+    // Level -2: Sub-Basement (Garage, Sewers, Spider Cellar)
+    'l_m2_garage': new THREE.Vector3(-11.0, -11.5, -4.0),
+    'l_m2_ramp_bot': new THREE.Vector3(-2.0, -11.5, -4.0),
+    'l_m2_spider': new THREE.Vector3(10.0, -11.5, -4.0),
+    'l_m2_sewer': new THREE.Vector3(0.0, -11.5, 12.0),
+    'l_m2_sewer_cell': new THREE.Vector3(8.0, -11.5, 14.0),
+
+    // Level -1: Main Basement
+    'l_m1_ramp_top': new THREE.Vector3(-2.0, -5.5, -4.0),
+    'l_m1_hall': new THREE.Vector3(0.0, -5.5, 0.0),
+    'l_m1_sauna': new THREE.Vector3(-10.0, -5.5, 8.0),
+    'l_m1_safe': new THREE.Vector3(10.0, -5.5, 2.0),
+    'l_m1_stairs_bot': new THREE.Vector3(-4.5, -5.5, -8.5),
+
+    // Level 0: Ground Floor & Backyard
+    'l0_stairs_down_top': new THREE.Vector3(-4.5, 0.5, -0.5),
+    'l0_foyer': new THREE.Vector3(0.0, 0.5, 6.0),
+    'l0_front_door': new THREE.Vector3(0.0, 0.5, 16.0),
+    'l0_kitchen': new THREE.Vector3(-8.0, 0.5, 4.0),
+    'l0_dining': new THREE.Vector3(-8.0, 0.5, -2.0),
+    'l0_study': new THREE.Vector3(8.0, 0.5, 0.0),
+    'l0_backyard': new THREE.Vector3(0.0, 0.5, 22.0),
+    'l0_grand_stairs_bot': new THREE.Vector3(5.0, 0.5, 13.5),
+
+    // Level 1: Second Floor
+    'l1_grand_stairs_top': new THREE.Vector3(5.0, 5.8, 3.5),
+    'l1_hall_landing': new THREE.Vector3(0.0, 5.8, 3.5),
+    'l1_bed1': new THREE.Vector3(-7.0, 5.8, 6.0),
+    'l1_bath': new THREE.Vector3(8.0, 5.8, 6.0),
+    'l1_bed2': new THREE.Vector3(-6.0, 5.8, -4.0),
+    'l1_crow': new THREE.Vector3(-8.0, 5.8, -12.0),
+    'l1_attic_stairs_bot': new THREE.Vector3(5.0, 5.8, -6.0),
+
+    // Level 2: Third Floor / Attic
+    'l2_attic_stairs_top': new THREE.Vector3(5.0, 11.2, -12.0),
+    'l2_attic_landing': new THREE.Vector3(0.0, 11.2, 0.0),
+    'l2_jail': new THREE.Vector3(8.0, 11.2, 4.0),
+    'l2_special': new THREE.Vector3(-7.0, 11.2, 4.0),
+    'l2_nursery': new THREE.Vector3(-6.0, 11.2, -6.0)
   },
 
   edges: {
-    'bed_start': ['door_start'],
-    'door_start': ['bed_start', 'hall_mid'],
-    'hall_mid': ['door_start', 'hall_east'],
-    'hall_east': ['hall_mid', 'stairs_top'],
-    'stairs_top': ['hall_east', 'stairs_mid'],
-    'stairs_mid': ['stairs_top', 'stairs_bottom'],
-    'stairs_bottom': ['stairs_mid', 'foyer'],
-    'foyer': ['stairs_bottom', 'front_door', 'living_room', 'stairs_down_top'],
-    'front_door': ['foyer'],
-    'living_room': ['foyer', 'dining_room'],
-    'dining_room': ['living_room', 'kitchen'],
-    'kitchen': ['dining_room'],
-    'stairs_down_top': ['foyer', 'stairs_down_mid'],
-    'stairs_down_mid': ['stairs_down_top', 'stairs_down_bot'],
-    'stairs_down_bot': ['stairs_down_mid', 'garage_main'],
-    'garage_main': ['stairs_down_bot', 'garage_east'],
-    'garage_east': ['garage_main']
+    // Level -2 Connections
+    'l_m2_garage': ['l_m2_ramp_bot'],
+    'l_m2_ramp_bot': ['l_m2_garage', 'l_m2_spider', 'l_m2_sewer', 'l_m1_ramp_top'],
+    'l_m2_spider': ['l_m2_ramp_bot', 'l_m2_sewer'],
+    'l_m2_sewer': ['l_m2_ramp_bot', 'l_m2_spider', 'l_m2_sewer_cell'],
+    'l_m2_sewer_cell': ['l_m2_sewer'],
+
+    // Level -1 Connections
+    'l_m1_ramp_top': ['l_m2_ramp_bot', 'l_m1_hall'],
+    'l_m1_hall': ['l_m1_ramp_top', 'l_m1_sauna', 'l_m1_safe', 'l_m1_stairs_bot'],
+    'l_m1_sauna': ['l_m1_hall'],
+    'l_m1_safe': ['l_m1_hall'],
+    'l_m1_stairs_bot': ['l_m1_hall', 'l0_stairs_down_top'],
+
+    // Level 0 Connections
+    'l0_stairs_down_top': ['l_m1_stairs_bot', 'l0_foyer', 'l0_kitchen'],
+    'l0_foyer': ['l0_stairs_down_top', 'l0_front_door', 'l0_dining', 'l0_study', 'l0_grand_stairs_bot'],
+    'l0_front_door': ['l0_foyer'],
+    'l0_kitchen': ['l0_stairs_down_top', 'l0_dining'],
+    'l0_dining': ['l0_kitchen', 'l0_foyer', 'l0_backyard'],
+    'l0_study': ['l0_foyer'],
+    'l0_backyard': ['l0_dining'],
+    'l0_grand_stairs_bot': ['l0_foyer', 'l1_grand_stairs_top'],
+
+    // Level 1 Connections
+    'l1_grand_stairs_top': ['l0_grand_stairs_bot', 'l1_hall_landing'],
+    'l1_hall_landing': ['l1_grand_stairs_top', 'l1_bed1', 'l1_bath', 'l1_bed2', 'l1_attic_stairs_bot'],
+    'l1_bed1': ['l1_hall_landing'],
+    'l1_bath': ['l1_hall_landing'],
+    'l1_bed2': ['l1_hall_landing', 'l1_crow'],
+    'l1_crow': ['l1_bed2'],
+    'l1_attic_stairs_bot': ['l1_hall_landing', 'l2_attic_stairs_top'],
+
+    // Level 2 Connections
+    'l2_attic_stairs_top': ['l1_attic_stairs_bot', 'l2_attic_landing'],
+    'l2_attic_landing': ['l2_attic_stairs_top', 'l2_jail', 'l2_special', 'l2_nursery'],
+    'l2_jail': ['l2_attic_landing'],
+    'l2_special': ['l2_attic_landing'],
+    'l2_nursery': ['l2_attic_landing']
   },
 
   getNearestNode(pos) {
-    let best = null;
+    let best = 'l_m1_hall';
     let minDist = Infinity;
     for (const [id, nodePos] of Object.entries(this.nodes)) {
       const d = pos.distanceTo(nodePos);
@@ -104,7 +147,7 @@ const NavGraph = {
   }
 };
 
-// 2. PERSISTENT LOCAL STORAGE & CAREER STATS
+// 2. PERSISTENT LOCAL STORAGE & CAREER METRICS
 const CareerStats = {
   load() {
     const savedName = localStorage.getItem('granny_username');
@@ -208,7 +251,7 @@ const Viewmodel = {
     key.add(stem);
     this.models['GenericKey'] = key;
 
-    // GP Mallet Bat Viewmodel
+    // Granny Player (GP) Mallet Bat Viewmodel
     const batGroup = new THREE.Group();
     const batMesh = new THREE.Mesh(new THREE.CylinderGeometry(0.045, 0.07, 1.1, 8), Assets.woodMat);
     batMesh.position.set(0.1, 0.1, -0.2);
@@ -262,7 +305,7 @@ const Viewmodel = {
   }
 };
 
-// 4. PLAYER CONTROLLER WITH LIGHTING & PHYSICS
+// 4. PLAYER CONTROLLER WITH SAFE DUAL-STAGE CAMERA LIGHTING
 const Player = {
   position: new THREE.Vector3(-6.5, 6.0, 8.5),
   velocity: new THREE.Vector3(),
@@ -283,8 +326,8 @@ const Player = {
   isGrounded: false,
 
   init(camera, scene) {
-    // Clean, balanced player torch (never computes NaN shader errors)
-    this.torchLight = new THREE.PointLight(0xffeedd, 1.4, 22);
+    // Omnidirectional Player Torch Light (Avoids SpotLight NaN target bugs)
+    this.torchLight = new THREE.PointLight(0xffeedd, 2.5, 30);
     this.torchLight.position.set(0, 0, 0.2);
     camera.add(this.torchLight);
 
@@ -317,7 +360,7 @@ const Player = {
   },
 
   update(dt, camera) {
-    // A. WAKE-UP BED ANIMATION PROGRESSION
+    // A. WAKE-UP BED ANIMATION PROGRESSION (Smooth 2.4s rise & step onto floor)
     if (this.isIntroPlaying) {
       this.introTimer += dt;
 
@@ -549,8 +592,8 @@ const Player = {
         return;
       }
 
-      if (targetY < -6.0) {
-        this.position.y = -6.0;
+      if (targetY < -12.0) {
+        this.position.y = -12.0;
         this.velocity.y = 0;
         this.isGrounded = true;
         return;
@@ -762,7 +805,7 @@ function updatePhysicsAndWorld(dt) {
       if (prop.vaseMesh) {
         prop.vaseMesh.position.y = Math.max(0.1, prop.vaseMesh.position.y - 4.0 * dt);
       }
-    } else if (prop.type === 'painting' && prop.isFallen && prop.group.position.y > 6.2) {
+    } else if (prop.type === 'painting' && prop.isFallen && prop.group.position.y > -11.5) {
       prop.group.position.addScaledVector(prop.velocity, dt);
     }
   }
@@ -797,7 +840,7 @@ function updatePhysicsAndWorld(dt) {
   }
 }
 
-// 8. GRANNY TUNG TUNG SAHUR AI (CONE VISION & PROXIMITY AGGRO)
+// 8. GRANNY TUNG TUNG SAHUR AI (CONE VISION, 5-TIER PATHFINDING & NO CORRUPT RAYCASTS)
 const MonsterAI = {
   mesh: null,
   state: 'PATROL',
@@ -810,7 +853,10 @@ const MonsterAI = {
   currentPath: [],
   targetPos: new THREE.Vector3(),
   searchTimer: 0,
-  patrolNodes: ['hall_mid', 'hall_east', 'stairs_top', 'foyer', 'living_room', 'dining_room', 'kitchen', 'garage_main'],
+  patrolNodes: [
+    'l_m1_hall', 'l0_foyer', 'l0_kitchen', 'l0_dining', 'l0_backyard',
+    'l1_hall_landing', 'l1_bed1', 'l1_bed2', 'l2_attic_landing', 'l_m2_garage'
+  ],
   patrolIdx: 0,
   animTime: 0,
   rightArm: null,
@@ -877,7 +923,8 @@ const MonsterAI = {
     g.add(arm);
     this.rightArm = arm;
 
-    g.position.set(0, 0.2, 12.0);
+    // Default safety spawn: Level -1 Main Basement
+    g.position.set(0.0, LEVEL_ELEVATIONS.LEVEL_MINUS_1 + 0.5, 1.0);
     scene.add(g);
     this.mesh = g;
 
@@ -925,14 +972,14 @@ const MonsterAI = {
     const fwd = new THREE.Vector3(0, 0, 1).applyEuler(this.mesh.rotation);
     _tempVecA.normalize();
 
-    // 75° Vision Cone: if her back is turned, she CANNOT see you!
+    // 75° Vision Cone: if her back is turned, she CANNOT see you
     const angle = fwd.angleTo(_tempVecA);
     if (angle > this.visionAngle) {
       this.lastCanSeeResult = false;
       return false;
     }
 
-    // Proximity aggro in same room (unless crouching)
+    // Proximity agro in same room (unless player is crouching)
     if (dist < 4.5 && !Player.isCrouched) {
       this.lastCanSeeResult = true;
       return true;
@@ -941,7 +988,7 @@ const MonsterAI = {
     _tempRayOrigin.set(this.mesh.position.x, this.mesh.position.y + 1.8, this.mesh.position.z);
     const ray = new THREE.Ray(_tempRayOrigin, _tempVecA);
 
-    // Official Three.js raycasting method (never throws box.intersectsRay error)
+    // Official Three.js Ray-Box intersection check
     const walls = CollisionWorld.wallsAndDoors;
     for (let i = 0; i < walls.length; i++) {
       const box = walls[i];
@@ -978,7 +1025,6 @@ const MonsterAI = {
   },
 
   update(dt) {
-    // Only run Granny AI if actually playing in the manor! (Never runs in Main Menu)
     if (!this.mesh || GameState.isGP || !GameState.inGame || GameState.isDying) return;
 
     this.animTime += dt;
@@ -1061,7 +1107,7 @@ const MonsterAI = {
   pickNextPatrolNode() {
     this.patrolIdx = (this.patrolIdx + 1) % this.patrolNodes.length;
     const nodeId = this.patrolNodes[this.patrolIdx];
-    const target = NavGraph.nodes[nodeId];
+    const target = NavGraph.nodes[nodeId] || NavGraph.nodes['l_m1_hall'];
     this.currentPath = NavGraph.findPath(this.mesh.position, target);
   }
 };
@@ -1110,7 +1156,6 @@ const Input = {
       }
     });
 
-    // Safe Pointer Lock attachment
     const clickFocus = document.getElementById('click-to-focus');
     if (clickFocus) {
       clickFocus.onclick = () => {
@@ -1218,6 +1263,7 @@ function emergeFromHiding() {
   document.getElementById('stealth-indicator').classList.remove('hidden');
 }
 
+// 22-ITEM LOCK & INTERACTION SOLVER
 function doInteract(camera) {
   audio.init();
   if (Player.isHiding) {
@@ -1240,6 +1286,7 @@ function doInteract(camera) {
     return;
   }
 
+  // Check Hiding Spots (Under Bed / Inside Wardrobe)
   for (let i = 0; i < House.hidingSpots.length; i++) {
     const spot = House.hidingSpots[i];
     if (Player.position.distanceTo(spot.position) < 2.5) {
@@ -1260,7 +1307,7 @@ function showPrompt(text) {
   p._t = setTimeout(() => { p.style.display = 'none'; }, 2400);
 }
 
-// 10. PAUSE & IN-GAME ACTION MENU ([M] OR MOBILE [MENU])
+// 10. IN-GAME ACTION / PAUSE MENU ([M] OR MOBILE [MENU])
 function togglePauseMenu() {
   const pMenu = document.getElementById('pause-menu-modal');
   const isOpen = pMenu.style.display === 'flex';
@@ -1298,13 +1345,11 @@ document.getElementById('btn-pause-exit').onclick = () => {
   window.location.reload();
 };
 
-// 11. DAY PROGRESSION, JUMPSCARE & GAME OVER (INSTANT RESTART/CASCADE FIXED)
+// 11. DAY PROGRESSION, JUMPSCARE & GAME OVER
 function triggerJumpscare() {
-  // Prevent multiple calls and 60 FPS death cascades
   if (GameState.isDying || !GameState.inGame) return;
   GameState.isDying = true;
 
-  // Immediately stun AI so she doesn't loop-attack
   MonsterAI.state = 'STUNNED';
   audio.stopChase();
   audio.playBatHit();
@@ -1319,8 +1364,8 @@ function triggerJumpscare() {
     GameState.playerStats.deaths++;
     CareerStats.save();
 
-    // Immediately teleport Granny back to her spawn downstairs
-    MonsterAI.mesh.position.set(0, 0.2, 12.0);
+    // SAFETY RESPAWN GUARD: Force Granny back to Level -1 Main Basement
+    MonsterAI.mesh.position.set(0.0, LEVEL_ELEVATIONS.LEVEL_MINUS_1 + 0.5, 1.0);
     MonsterAI.state = 'PATROL';
     MonsterAI.currentPath = [];
 
@@ -1337,6 +1382,7 @@ function updateDayVignetteAndSpeed() {
   const opacities = [0, 0, 0.25, 0.45, 0.65, 0.88];
   blood.style.opacity = opacities[GameState.day] || 0;
 
+  // Limp progression: Speed decreases each day
   const speedMultipliers = [1, 1, 0.92, 0.84, 0.76, 0.68];
   Player.limpMultiplier = speedMultipliers[GameState.day] || 1;
 }
@@ -1346,8 +1392,7 @@ function respawnPlayer() {
   document.getElementById('health-bar-fill').style.width = '100%';
   GameState.isDying = false;
 
-  // Reset Granny back downstairs so no spawn camping occurs
-  MonsterAI.mesh.position.set(0, 0.2, 12.0);
+  MonsterAI.mesh.position.set(0.0, LEVEL_ELEVATIONS.LEVEL_MINUS_1 + 0.5, 1.0);
   MonsterAI.state = 'PATROL';
   MonsterAI.currentPath = [];
 
@@ -1428,14 +1473,14 @@ function openHostLaptopTerminal() {
   table.innerHTML = `<div><b>${document.getElementById('prof-name').value} (Host)</b> - Stats: Escapes ${GameState.playerStats.escapes} | Deaths ${GameState.playerStats.deaths}</div>`;
 
   Object.values(NetworkEngine.peers).forEach((p, idx) => {
-    table.innerHTML += `<div><b>${p.name || 'Survivor ' + (idx + 1)}</b> - Connected (Ping: 45ms)</div>`;
+    table.innerHTML += `<div><b>${p.name || 'Survivor ' + (idx + 1)}</b> - Connected (Ping: 42ms)</div>`;
   });
 }
 document.getElementById('btn-close-laptop').onclick = () => {
   document.getElementById('laptop-modal').style.display = 'none';
 };
 
-// 13. 3D LOBBY START COUNTDOWN
+// 13. 3D LOBBY START COUNTDOWN (AUTO-RESETS ON JOIN/LEAVE)
 let lobbyCountdownTimer = null;
 let lobbyCountdownVal = 10;
 
@@ -1473,7 +1518,7 @@ function cancelLobbyCountdown() {
   }
 }
 
-// 14. MULTIPLAYER NETWORKING
+// 14. MULTIPLAYER NETWORKING & GP MODE SYNCHRONIZATION
 const NetworkEngine = {
   client: null,
   isHost: false,
@@ -1688,7 +1733,7 @@ function setupAsGrannyPlayer() {
       clearInterval(napInterval);
       napOverlay.style.display = 'none';
 
-      Player.position.set(-7.0, -5.8, -6.0);
+      Player.position.set(-11.0, LEVEL_ELEVATIONS.LEVEL_MINUS_2 + 1.0, -4.0); // Spawns in Garage
       Viewmodel.setHeldItem('GP_Bat');
       document.getElementById('hud').style.display = 'block';
       showPrompt('You woke up! Hunt down survivors with [LMB / FIRE]!');
@@ -1786,7 +1831,7 @@ const SettingsEngine = {
   }
 };
 
-// 16. RUNTIME INITIALIZATION & HORROR-BALANCED LIGHTING
+// 17. RUNTIME INITIALIZATION & HORROR-BALANCED LIGHTING
 const GameState = {
   mode: 'sp',
   difficulty: 'normal',
@@ -1810,7 +1855,6 @@ const EngineLimiter = {
 const canvasContainer = document.getElementById('canvas-container');
 const scene = new THREE.Scene();
 scene.background = new THREE.Color(0x1a1614);
-// Linear horror fog (balanced so rooms are never washed out or pitch black)
 scene.fog = new THREE.Fog(0x1a1614, 15, 65);
 
 const camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 90);
@@ -1821,7 +1865,7 @@ renderer.setSize(window.innerWidth, window.innerHeight);
 renderer.setPixelRatio(Math.min(window.devicePixelRatio, 1.5));
 canvasContainer.appendChild(renderer.domElement);
 
-// Balanced Ambient Light (45% intensity prevents flat-black void while keeping horror contrast)
+// Balanced Ambient Light
 const ambLight = new THREE.AmbientLight(0xffeedd, 0.45);
 scene.add(ambLight);
 
@@ -1830,9 +1874,9 @@ const sunLight = new THREE.DirectionalLight(0xffeedd, 0.35);
 sunLight.position.set(0, 20, 0);
 scene.add(sunLight);
 
-// Atmospheric Manor Point Lamps
+// Point Lamps in Manor
 const bedroomLamp = new THREE.PointLight(0xffb055, 1.5, 16);
-bedroomLamp.position.set(-8, 9.5, 8);
+bedroomLamp.position.set(-8, LEVEL_ELEVATIONS.LEVEL_1 + 4.5, 8);
 scene.add(bedroomLamp);
 
 const foyerLamp = new THREE.PointLight(0xffdd99, 1.5, 18);
@@ -1840,10 +1884,10 @@ foyerLamp.position.set(0, 4.2, 8);
 scene.add(foyerLamp);
 
 const basementLight = new THREE.PointLight(0x66cc88, 1.2, 14);
-basementLight.position.set(-4, -3.5, -4);
+basementLight.position.set(-4, LEVEL_ELEVATIONS.LEVEL_MINUS_1 + 3.0, -4);
 scene.add(basementLight);
 
-// Build Map, Player & AI
+// Build Level Map, Player Controller & AI
 House.build(scene);
 Player.init(camera, scene);
 MonsterAI.init(scene);
@@ -1917,7 +1961,6 @@ document.getElementById('btn-cancel-create').onclick = () => {
   document.getElementById('row-mp-back').style.display = 'flex';
 };
 
-// DYNAMIC TOGGLES FOR GP MODE & FUN MODE (ONLY IF MAX PLAYERS >= 5)
 document.getElementById('mp-max-players').oninput = (e) => {
   const v = parseInt(e.target.value);
   document.getElementById('mp-max-players-val').innerText = v;
@@ -1930,7 +1973,6 @@ document.getElementById('mp-max-players').oninput = (e) => {
   }
 };
 
-// HOST AND HOP IN LOBBY BUTTON
 document.getElementById('btn-commit-create-lobby').onclick = () => {
   NetworkEngine.isHost = true;
   NetworkEngine.roomCode = 'SAH-' + Math.floor(10 + Math.random() * 89);
@@ -1965,7 +2007,7 @@ document.getElementById('btn-commit-create-lobby').onclick = () => {
     }
   } catch (err) {}
 
-  Player.position.set(60.0, 30.0, 2.0);
+  Player.position.set(60.0, 30.0, 2.0); // Spawns Host inside 3D Lobby
   document.getElementById('hud').style.display = 'block';
   showPrompt('Spawned in 3D Lobby! Press [Enter] to start, or [E] on laptop for settings.');
 };
@@ -2041,7 +2083,7 @@ function renderLobbyCard(data) {
   list.appendChild(div);
 }
 
-// 17. THROTTLED 1-1200 FPS ENGINE LOOP
+// 18. THROTTLED 1-1200 FPS ENGINE LOOP
 setInterval(() => { NetworkEngine.tickSync(); }, 50);
 
 function gameLoop() {
