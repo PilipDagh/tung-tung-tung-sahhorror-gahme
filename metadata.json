@@ -1,0 +1,8 @@
+{
+  "name": "Granny: Tung Tung Sahur",
+  "description": "3D Horror Escape Game - Granny: Tung Tung Sahur Edition. Evade Granny, explore the haunted 5-floor manor, search for keys and tools, and escape before Day 5.",
+  "requestFramePermissions": [],
+  "majorCapabilities": [
+    "MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"
+  ]
+}
